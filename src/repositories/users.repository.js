@@ -15,27 +15,16 @@ export class UsersRepository {
         return await userModel.findById(id, projection).lean();
     }
 
-    // Alias compatible
-    async getUserById(id, projection = "-password") {
-        return await this.getById(id, projection);
-    }
-
+    /**
+     * Devuelve el documento completo (incluye password) para que el login pueda compararla con bcrypt.
+     * Pasar una proyección explícita (ej. "-password") para ocultarla.
+     */
     async getByEmail(email, projection = null) {
         return await userModel.findOne({ email }, projection).lean();
     }
 
-    // Alias compatible
-    async findByEmail(email, projection = null) {
-        return await this.getByEmail(email, projection);
-    }
-
     async create(userData) {
         return await userModel.create(userData);
-    }
-
-    // Alias compatible
-    async createUser(userData) {
-        return await this.create(userData);
     }
 
     async update(id, updateData, projection = "-password") {

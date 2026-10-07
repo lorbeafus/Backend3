@@ -1,33 +1,51 @@
 {
   "info": {
-    "_postman_id": "8f5a1b32-e64b-4c28-98e1-0c58f0e34c21",
-    "name": "Plataforma de Eventos - API Backend (Entrega Final)",
-    "description": "Colección completa de endpoints para la Entrega Final del curso Backend II (Plataforma de Eventos, Inscripciones, Roles, Tickets, Nodemailer y Arquitectura por Capas DAO/Repository/DTO).",
+    "name": "ShipNow API",
+    "description": "Colección de ShipNow (Users, Sessions, Products). La cookie currentUser se guarda automáticamente tras el login. Las rutas de administrador requieren un usuario con rol admin asignado en la base de datos.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    }
+  ],
   "item": [
     {
-      "name": "01. Health",
+      "name": "Health",
       "item": [
         {
-          "name": "Health Check",
+          "name": "Health check",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
             }
           }
         }
       ]
     },
     {
-      "name": "02. Autenticación y Sesiones",
+      "name": "Sessions",
       "item": [
         {
-          "name": "Registro - Usuario Común",
+          "name": "Register (rol siempre user)",
           "request": {
             "method": "POST",
             "header": [
@@ -38,17 +56,28 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Lucas\",\n  \"last_name\": \"Gómez\",\n  \"email\": \"lucas@test.com\",\n  \"password\": \"123456\"\n}"
+              "raw": "{\n  \"first_name\": \"Laura\",\n  \"last_name\": \"Gómez\",\n  \"email\": \"laura@shipnow.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/sessions/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sessions", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "register"
+              ]
             }
           }
         },
         {
-          "name": "Registro - Organizador",
+          "name": "Register con role admin (el rol se ignora)",
           "request": {
             "method": "POST",
             "header": [
@@ -59,12 +88,23 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Martín\",\n  \"last_name\": \"Organizador\",\n  \"email\": \"organizer@test.com\",\n  \"password\": \"123456\"\n}"
+              "raw": "{\n  \"first_name\": \"Eve\",\n  \"last_name\": \"Test\",\n  \"email\": \"eve@shipnow.com\",\n  \"password\": \"password123\",\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/sessions/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sessions", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "register"
+              ]
             }
           }
         },
@@ -80,24 +120,41 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"lucas@test.com\",\n  \"password\": \"123456\"\n}"
+              "raw": "{\n  \"email\": \"laura@shipnow.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/sessions/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sessions", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "login"
+              ]
             }
           }
         },
         {
-          "name": "Get Current User (/current)",
+          "name": "Current",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sessions/current",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sessions", "current"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "current"
+              ]
             }
           }
         },
@@ -108,48 +165,172 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/sessions/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sessions", "logout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "logout"
+              ]
             }
           }
         }
       ]
     },
     {
-      "name": "03. Eventos",
+      "name": "Users (admin)",
       "item": [
         {
-          "name": "Listar Eventos (con Filtros y Paginación)",
+          "name": "Listar usuarios",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/events?status=published&page=1&limit=5&sort=date",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events"],
-              "query": [
-                { "key": "status", "value": "published" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "5" },
-                { "key": "sort", "value": "date" }
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
               ]
             }
           }
         },
         {
-          "name": "Consultar Evento por ID",
+          "name": "Usuario por ID",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/events/{{eventId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events", "{{eventId}}"]
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Listar productos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
             }
           }
         },
         {
-          "name": "Crear Evento (Organizer / Admin)",
+          "name": "Filtrar por status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?status=available",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "available"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filtrar por precio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?minPrice=100&maxPrice=2000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "minPrice",
+                  "value": "100"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "2000"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por nombre",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?search=caja",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "caja"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Producto por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear producto (admin)",
           "request": {
             "method": "POST",
             "header": [
@@ -160,17 +341,27 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Workshop Avanzado de Node.js\",\n  \"description\": \"Aprende arquitectura profesional por capas, autenticación con JWT y control de cupos.\",\n  \"category\": \"{{categoryId}}\",\n  \"date\": \"2026-11-20T18:00:00.000Z\",\n  \"location\": \"Online - Stream\",\n  \"capacity\": 30,\n  \"price\": 1500,\n  \"status\": \"published\",\n  \"level\": \"advanced\"\n}"
+              "raw": "{\n  \"name\": \"Caja Cartón Mediana 40x30x30\",\n  \"description\": \"Caja reforzada para envíos\",\n  \"price\": 1450,\n  \"stock\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/events",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events"]
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
             }
           }
         },
         {
-          "name": "Modificar Evento (Dueño / Admin)",
+          "name": "Actualizar producto (admin)",
           "request": {
             "method": "PUT",
             "header": [
@@ -181,138 +372,45 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Workshop Avanzado de Node.js & TypeScript\",\n  \"capacity\": 50\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/events/{{eventId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events", "{{eventId}}"]
-            }
-          }
-        },
-        {
-          "name": "Cambiar Estado de Evento (Dueño / Admin)",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"price\": 1600,\n  \"stock\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"cancelled\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/events/{{eventId}}/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events", "{{eventId}}", "status"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "04. Tickets e Inscripciones",
-      "item": [
-        {
-          "name": "Inscribirse a un Evento (POST /api/events/:eid/tickets)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"quantity\": 1\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/events/{{eventId}}/tickets",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events", "{{eventId}}", "tickets"]
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
             }
           }
         },
         {
-          "name": "Consultar Mis Tickets (GET /api/tickets/my-tickets)",
+          "name": "Eliminar producto (admin)",
           "request": {
-            "method": "GET",
+            "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/tickets/my-tickets",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tickets", "my-tickets"]
-            }
-          }
-        },
-        {
-          "name": "Ver Inscriptos de Evento (Organizador / Admin)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/events/{{eventId}}/tickets",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "events", "{{eventId}}", "tickets"]
-            }
-          }
-        },
-        {
-          "name": "Cancelar Inscripción (PATCH /api/tickets/:tid/cancel)",
-          "request": {
-            "method": "PATCH",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tickets", "{{ticketId}}", "cancel"]
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
             }
           }
         }
       ]
-    },
-    {
-      "name": "05. Usuarios (Admin)",
-      "item": [
-        {
-          "name": "Listar Todos los Usuarios (Solo Admin)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users"]
-            }
-          }
-        }
-      ]
-    }
-  ],
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:3000",
-      "type": "string"
-    },
-    {
-      "key": "eventId",
-      "value": "65f1a2b3c4d5e6f7a8b9c0d1",
-      "type": "string"
-    },
-    {
-      "key": "categoryId",
-      "value": "65f1a2b3c4d5e6f7a8b9c0d2",
-      "type": "string"
-    },
-    {
-      "key": "ticketId",
-      "value": "65f1a2b3c4d5e6f7a8b9c0d3",
-      "type": "string"
     }
   ]
 }

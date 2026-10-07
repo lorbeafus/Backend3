@@ -58,6 +58,3 @@ export const config = Object.freeze({
     JWT_SECRET: process.env.JWT_SECRET.trim(),
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN?.trim() || "1h",
 });
-
-// Alias compatible para código existente
-export const env = config;

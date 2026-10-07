@@ -1,217 +1,174 @@
 import { productsRepository } from "../repositories/products.repository.js";
 import { PRODUCT_STATUS } from "../constants/index.js";
+import { httpError } from "../utils/errors.js";
+import {
+    assertBodyObject,
+    assertValidId,
+    escapeRegex,
+    isNonEmptyString,
+    parseNumber,
+} from "../utils/validation.js";
 
-const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+const MAX_SEARCH_LENGTH = 100;
 
 /**
  * Servicio de Productos para ShipNow API.
  * Concentra las decisiones de negocio, reglas de validación de precios/stock,
- * transiciones de estado y verificación de existencia.
+ * derivación del estado y verificación de existencia.
  * No depende de Express (no recibe req ni res).
+ *
+ * Regla de dominio: `status` lo calcula siempre el servidor a partir del stock final
+ * (stock 0 → OUT_OF_STOCK, stock > 0 → AVAILABLE). Si el cliente envía `status` en el body, se ignora.
  */
 export class ProductsService {
-    _validateId(id) {
-        if (!id || !OBJECT_ID_REGEX.test(id)) {
-            const error = new Error("El ID proporcionado no es un identificador válido");
-            error.statusCode = 400;
-            throw error;
+    _deriveStatus(stock) {
+        return stock === 0 ? PRODUCT_STATUS.OUT_OF_STOCK : PRODUCT_STATUS.AVAILABLE;
+    }
+
+    _parsePrice(value) {
+        const price = parseNumber(value);
+        if (!Number.isFinite(price) || price <= 0) {
+            throw httpError(400, "El precio debe ser un número mayor a 0");
         }
+        return price;
+    }
+
+    _parseStock(value) {
+        const stock = parseNumber(value);
+        if (!Number.isInteger(stock) || stock < 0) {
+            throw httpError(400, "El stock debe ser un número entero mayor o igual a 0");
+        }
+        return stock;
+    }
+
+    _parseFilterNumber(value, label) {
+        const number = parseNumber(value);
+        if (!Number.isFinite(number) || number < 0) {
+            throw httpError(400, `${label} debe ser un número mayor o igual a 0`);
+        }
+        return number;
     }
 
     async getProducts(query = {}) {
         const filter = {};
+        const { status, minPrice, maxPrice, search } = query ?? {};
 
-        // Filtrado opcional por estado
-        if (query.status) {
+        if (status !== undefined) {
             const validStatuses = Object.values(PRODUCT_STATUS);
-            if (!validStatuses.includes(query.status)) {
-                const error = new Error(`Estado no válido. Los estados permitidos son: ${validStatuses.join(", ")}`);
-                error.statusCode = 400;
-                throw error;
+            if (typeof status !== "string" || !validStatuses.includes(status)) {
+                throw httpError(400, `Estado no válido. Los estados permitidos son: ${validStatuses.join(", ")}`);
             }
-            filter.status = query.status;
+            filter.status = status;
         }
 
-        // Filtrado opcional por rango de precio
-        if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+        if (minPrice !== undefined || maxPrice !== undefined) {
             filter.price = {};
-            if (query.minPrice !== undefined) {
-                const min = Number(query.minPrice);
-                if (isNaN(min) || min < 0) {
-                    const error = new Error("minPrice debe ser un número mayor o igual a 0");
-                    error.statusCode = 400;
-                    throw error;
-                }
-                filter.price.$gte = min;
-            }
-            if (query.maxPrice !== undefined) {
-                const max = Number(query.maxPrice);
-                if (isNaN(max) || max < 0) {
-                    const error = new Error("maxPrice debe ser un número mayor o igual a 0");
-                    error.statusCode = 400;
-                    throw error;
-                }
-                filter.price.$lte = max;
-            }
-            if (query.minPrice !== undefined && query.maxPrice !== undefined && Number(query.minPrice) > Number(query.maxPrice)) {
-                const error = new Error("minPrice no puede ser mayor que maxPrice");
-                error.statusCode = 400;
-                throw error;
+            if (minPrice !== undefined) filter.price.$gte = this._parseFilterNumber(minPrice, "minPrice");
+            if (maxPrice !== undefined) filter.price.$lte = this._parseFilterNumber(maxPrice, "maxPrice");
+            if (minPrice !== undefined && maxPrice !== undefined && filter.price.$gte > filter.price.$lte) {
+                throw httpError(400, "minPrice no puede ser mayor que maxPrice");
             }
         }
 
-        // Búsqueda por coincidencia en nombre
-        if (query.search && query.search.trim() !== "") {
-            filter.name = { $regex: query.search.trim(), $options: "i" };
+        if (search !== undefined) {
+            if (typeof search !== "string") {
+                throw httpError(400, "search debe ser un texto");
+            }
+            const term = search.trim();
+            if (term.length > MAX_SEARCH_LENGTH) {
+                throw httpError(400, `search no puede superar los ${MAX_SEARCH_LENGTH} caracteres`);
+            }
+            if (term !== "") {
+                // Se escapan los caracteres especiales: la búsqueda es por texto literal, no por regex.
+                filter.name = { $regex: escapeRegex(term), $options: "i" };
+            }
         }
 
         return await productsRepository.getAll({ filter });
     }
 
     async getProductById(id) {
-        this._validateId(id);
+        assertValidId(id);
         const product = await productsRepository.getById(id);
         if (!product) {
-            const error = new Error("Producto no encontrado");
-            error.statusCode = 404;
-            throw error;
+            throw httpError(404, "Producto no encontrado");
         }
         return product;
     }
 
     async createProduct(productData) {
-        const { name, description, price, stock, status } = productData;
+        assertBodyObject(productData);
+        const { name, description, price, stock } = productData;
 
-        if (!name || typeof name !== "string" || name.trim() === "") {
-            const error = new Error("El nombre del producto es obligatorio");
-            error.statusCode = 400;
-            throw error;
+        if (!isNonEmptyString(name)) {
+            throw httpError(400, "El nombre del producto es obligatorio");
+        }
+        if (!isNonEmptyString(description)) {
+            throw httpError(400, "La descripción del producto es obligatoria");
         }
 
-        if (!description || typeof description !== "string" || description.trim() === "") {
-            const error = new Error("La descripción del producto es obligatoria");
-            error.statusCode = 400;
-            throw error;
-        }
+        const parsedPrice = this._parsePrice(price);
+        const parsedStock = this._parseStock(stock);
 
-        const parsedPrice = Number(price);
-        if (price === undefined || isNaN(parsedPrice) || parsedPrice <= 0) {
-            const error = new Error("El precio debe ser un número positivo mayor a 0");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        const parsedStock = Number(stock);
-        if (stock === undefined || isNaN(parsedStock) || !Number.isInteger(parsedStock) || parsedStock < 0) {
-            const error = new Error("El stock debe ser un número entero mayor o igual a 0");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        let productStatus = status;
-        if (status) {
-            if (!Object.values(PRODUCT_STATUS).includes(status)) {
-                const error = new Error(`Estado no válido. Use: ${Object.values(PRODUCT_STATUS).join(", ")}`);
-                error.statusCode = 400;
-                throw error;
-            }
-        } else {
-            productStatus = parsedStock === 0 ? PRODUCT_STATUS.OUT_OF_STOCK : PRODUCT_STATUS.AVAILABLE;
-        }
-
-        // Si se carga con stock 0, coherencia de dominio
-        if (parsedStock === 0) {
-            productStatus = PRODUCT_STATUS.OUT_OF_STOCK;
-        }
-
-        const newProduct = {
+        return await productsRepository.create({
             name: name.trim(),
             description: description.trim(),
             price: parsedPrice,
             stock: parsedStock,
-            status: productStatus,
-        };
-
-        return await productsRepository.create(newProduct);
+            status: this._deriveStatus(parsedStock),
+        });
     }
 
     async updateProduct(id, updateData) {
-        this._validateId(id);
+        assertValidId(id);
+        assertBodyObject(updateData);
 
         const existing = await productsRepository.getById(id);
         if (!existing) {
-            const error = new Error("Producto no encontrado");
-            error.statusCode = 404;
-            throw error;
+            throw httpError(404, "Producto no encontrado");
         }
 
         const dataToUpdate = {};
 
         if (updateData.name !== undefined) {
-            if (typeof updateData.name !== "string" || updateData.name.trim() === "") {
-                const error = new Error("El nombre no puede estar vacío");
-                error.statusCode = 400;
-                throw error;
+            if (!isNonEmptyString(updateData.name)) {
+                throw httpError(400, "El nombre no puede estar vacío");
             }
             dataToUpdate.name = updateData.name.trim();
         }
 
         if (updateData.description !== undefined) {
-            if (typeof updateData.description !== "string" || updateData.description.trim() === "") {
-                const error = new Error("La descripción no puede estar vacía");
-                error.statusCode = 400;
-                throw error;
+            if (!isNonEmptyString(updateData.description)) {
+                throw httpError(400, "La descripción no puede estar vacía");
             }
             dataToUpdate.description = updateData.description.trim();
         }
 
         if (updateData.price !== undefined) {
-            const parsedPrice = Number(updateData.price);
-            if (isNaN(parsedPrice) || parsedPrice <= 0) {
-                const error = new Error("El precio debe ser un número mayor a 0");
-                error.statusCode = 400;
-                throw error;
-            }
-            dataToUpdate.price = parsedPrice;
+            dataToUpdate.price = this._parsePrice(updateData.price);
         }
 
         if (updateData.stock !== undefined) {
-            const parsedStock = Number(updateData.stock);
-            if (isNaN(parsedStock) || !Number.isInteger(parsedStock) || parsedStock < 0) {
-                const error = new Error("El stock debe ser un número entero mayor o igual a 0");
-                error.statusCode = 400;
-                throw error;
-            }
-            dataToUpdate.stock = parsedStock;
-
-            // Coherencia de estado al modificar stock
-            if (parsedStock === 0 && !updateData.status) {
-                dataToUpdate.status = PRODUCT_STATUS.OUT_OF_STOCK;
-            } else if (parsedStock > 0 && existing.status === PRODUCT_STATUS.OUT_OF_STOCK && !updateData.status) {
-                dataToUpdate.status = PRODUCT_STATUS.AVAILABLE;
-            }
+            dataToUpdate.stock = this._parseStock(updateData.stock);
         }
 
-        if (updateData.status !== undefined) {
-            if (!Object.values(PRODUCT_STATUS).includes(updateData.status)) {
-                const error = new Error(`Estado no válido. Use: ${Object.values(PRODUCT_STATUS).join(", ")}`);
-                error.statusCode = 400;
-                throw error;
-            }
-            dataToUpdate.status = updateData.status;
+        if (Object.keys(dataToUpdate).length === 0) {
+            throw httpError(400, "Debe enviar al menos un campo modificable: name, description, price o stock");
         }
+
+        // El estado siempre se recalcula a partir del stock final.
+        const finalStock = dataToUpdate.stock !== undefined ? dataToUpdate.stock : existing.stock;
+        dataToUpdate.status = this._deriveStatus(finalStock);
 
         return await productsRepository.update(id, dataToUpdate);
     }
 
     async deleteProduct(id) {
-        this._validateId(id);
+        assertValidId(id);
 
         const existing = await productsRepository.getById(id);
         if (!existing) {
-            const error = new Error("Producto no encontrado");
-            error.statusCode = 404;
-            throw error;
+            throw httpError(404, "Producto no encontrado");
         }
 
         return await productsRepository.delete(id);
