@@ -1,37 +1,41 @@
 import { Schema, model } from "mongoose";
+import { USER_ROLES } from "../constants/index.js";
 
 const userSchema = new Schema(
-  {
-    first_name: {
-      type: String,
-      required: true,
-      trim: true
+    {
+        first_name: {
+            type: String,
+            required: [true, "El nombre es obligatorio"],
+            trim: true,
+        },
+        last_name: {
+            type: String,
+            required: [true, "El apellido es obligatorio"],
+            trim: true,
+        },
+        email: {
+            type: String,
+            required: [true, "El email es obligatorio"],
+            unique: true,
+            lowercase: true,
+            trim: true,
+        },
+        password: {
+            type: String,
+            required: [true, "La contraseña es obligatoria"],
+        },
+        role: {
+            type: String,
+            enum: {
+                values: Object.values(USER_ROLES),
+                message: "Rol de usuario no válido",
+            },
+            default: USER_ROLES.USER,
+        },
     },
-    last_name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true
-    },
-    password: {
-      type: String,
-      required: true
-    },
-    role: {
-      type: String,
-      enum: ['admin', 'organizer', 'user'],
-      default: 'user'
+    {
+        timestamps: true,
     }
-  },
-  {
-    timestamps: true
-  }
 );
-export const userModel = model("user", userSchema);
 
+export const userModel = model("User", userSchema);

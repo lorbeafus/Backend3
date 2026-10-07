@@ -1,12 +1,19 @@
 import app from "./app.js";
-import { connectDB } from "../database.js";
-import { env } from "./config/env.js";
+import { connectDB } from "./config/database.js";
+import { config } from "./config/index.js";
 
-app.listen(env.PORT, () => {
-    connectDB().then(() => {
-        console.log("Database connected successfully");
-    }).catch(err => {
-        console.error("DB connection error:", err);
-    });
-    console.log(`Server is running on port ${env.PORT}`);
-});
+const startServer = async () => {
+    try {
+        // Conexión previa a la base de datos
+        await connectDB();
+
+        app.listen(config.PORT, () => {
+            console.log(`🚀 [ShipNow API] Servidor escuchando en http://localhost:${config.PORT} [Entorno: ${config.NODE_ENV}]`);
+        });
+    } catch (error) {
+        console.error("❌ [FATAL] Error crítico al inicializar el servidor:", error.message);
+        process.exit(1);
+    }
+};
+
+startServer();

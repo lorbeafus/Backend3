@@ -3,7 +3,8 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as JwtStrategy } from "passport-jwt";
 import { usersRepository } from "../repositories/users.repository.js";
 import { createHash, isValidPassword } from "../utils/hash.js";
-import { env } from "./env.js";
+import { config } from "./env.config.js";
+import { USER_ROLES } from "../constants/index.js";
 
 const cookieExtractor = (req) => {
     let token = null;
@@ -14,7 +15,7 @@ const cookieExtractor = (req) => {
 };
 
 export const initializePassport = () => {
-    // 1. Register Strategy
+    // 1. Estrategia de Registro local
     passport.use(
         "register",
         new LocalStrategy(
@@ -48,12 +49,13 @@ export const initializePassport = () => {
 
                     const hashedPassword = await createHash(password);
 
+                    // Por seguridad de la API, el registro público asigna estrictamente el rol USER
                     const newUser = await usersRepository.create({
-                        first_name,
-                        last_name,
+                        first_name: first_name.trim(),
+                        last_name: last_name.trim(),
                         email: normalizedEmail,
                         password: hashedPassword,
-                        role: "user",
+                        role: USER_ROLES.USER,
                     });
 
                     return done(null, newUser);
@@ -64,7 +66,7 @@ export const initializePassport = () => {
         )
     );
 
-    // 2. Login Strategy
+    // 2. Estrategia de Login local
     passport.use(
         "login",
         new LocalStrategy(
@@ -78,6 +80,7 @@ export const initializePassport = () => {
                     }
 
                     const normalizedEmail = email.trim().toLowerCase();
+                    // Para autenticación necesitamos la contraseña hasheada
                     const user = await usersRepository.getByEmail(normalizedEmail);
                     if (!user) {
                         return done(null, false, { message: "Credenciales inválidas" });
@@ -96,13 +99,13 @@ export const initializePassport = () => {
         )
     );
 
-    // 3. Current JWT Strategy
+    // 3. Estrategia JWT para extracción desde cookie
     passport.use(
         "current",
         new JwtStrategy(
             {
                 jwtFromRequest: cookieExtractor,
-                secretOrKey: env.JWT_SECRET,
+                secretOrKey: config.JWT_SECRET,
             },
             async (jwtPayload, done) => {
                 try {

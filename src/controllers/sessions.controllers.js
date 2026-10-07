@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { config } from "../config/index.js";
 import { generateToken } from "../utils/jwt.js";
 import { CurrentUserDTO, UserDTO } from "../dto/index.js";
 
@@ -43,7 +43,7 @@ export async function loginUser(req, res, next) {
             httpOnly: true,
             maxAge: 60 * 60 * 1000,
             sameSite: "lax",
-            secure: env.NODE_ENV === "production",
+            secure: config.NODE_ENV === "production",
         });
 
         res.status(200).json({
