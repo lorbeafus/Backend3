@@ -25,6 +25,7 @@ export const errorHandler = (err, req, res, next) => {
     }
 
     res.status(statusCode).json({
+        ...(err.insertedCounts ? { phase: err.phase, insertedCounts: err.insertedCounts } : {}),
         status: "error",
         statusCode,
         message: message || "Error interno del servidor",

@@ -6,6 +6,7 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 import productsRouter from "./routes/products.routes.js";
 import usersRouter from "./routes/users.routes.js";
 import sessionsRouter from "./routes/sessions.routes.js";
+import mocksRouter from "./routes/mocks.routes.js";
 
 const app = express();
 
@@ -23,10 +24,11 @@ app.get("/api/health", (req, res) => {
     res.status(200).json({ status: "active", message: "ShipNow API está funcionando correctamente" });
 });
 
-// Routers principales de ShipNow (Preentrega Módulo 1: Products y Users)
+// Routers principales de ShipNow
 app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/sessions", sessionsRouter);
+app.use("/api/mocks", mocksRouter);
 
 // Middleware centralizado de gestión de errores
 app.use(errorHandler);

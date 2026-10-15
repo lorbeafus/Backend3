@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "ShipNow API",
-    "description": "Colección de ShipNow (Users, Sessions, Products). La cookie currentUser se guarda automáticamente tras el login. Las rutas de administrador requieren un usuario con rol admin asignado en la base de datos.",
+    "name": "ShipNow API (Módulo 1 & 2)",
+    "description": "Colección oficial de ShipNow API para Backend III (Coderhouse).\nIncluye Users, Sessions, Products y el Módulo de Mocking y Logística (Mocks en memoria y Seed controlado).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -77,7 +77,7 @@
           }
         },
         {
-          "name": "Register con role admin (el rol se ignora)",
+          "name": "Register con role admin o driver (se ignora)",
           "request": {
             "method": "POST",
             "header": [
@@ -408,6 +408,174 @@
                 "{{productId}}"
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mocks (Generación en memoria)",
+      "item": [
+        {
+          "name": "Mock Users (qty=5)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/users?qty=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Genera 5 usuarios cliente simulados en memoria sin password."
+          }
+        },
+        {
+          "name": "Mock Drivers (qty=5)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/drivers?qty=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "drivers"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Genera 5 repartidores (DRIVER) simulados en memoria."
+          }
+        },
+        {
+          "name": "Mock Orders con related_users (qty=5)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/orders?qty=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Genera 5 pedidos simulados y devuelve los usuarios relacionados."
+          }
+        },
+        {
+          "name": "Mock Deliveries con entidades relacionadas (qty=5)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/deliveries?qty=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "deliveries"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Genera 5 entregas simuladas y devuelve pedidos, clientes y repartidores relacionados."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mocks (Seed controlada - Admin)",
+      "item": [
+        {
+          "name": "Seed Database (qty=5)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Inserta de forma controlada en MongoDB 5 usuarios, 5 repartidores, 5 pedidos y 5 entregas. Requiere rol admin y no estar en production."
+          }
+        },
+        {
+          "name": "Seed Database vía body (qty=10)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qty\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ]
+            },
+            "description": "Variante enviando qty en el body JSON."
           }
         }
       ]

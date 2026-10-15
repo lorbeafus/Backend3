@@ -32,3 +32,22 @@ export const parseNumber = (value) => {
 };
 
 export const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Valida un parámetro de cantidad (qty) como entero positivo dentro de un rango [1, maxLimit].
+ * Rechaza parámetros repetidos (arrays), strings no enteros, valores <= 0 o > maxLimit.
+ */
+export const parsePositiveIntegerQty = (rawQty, defaultQty = 10, maxLimit = 100) => {
+    if (rawQty === undefined) return defaultQty;
+    if (Array.isArray(rawQty)) {
+        throw httpError(400, "El parámetro 'qty' no puede repetirse");
+    }
+    const parsed = parseNumber(rawQty);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+        throw httpError(400, "El parámetro 'qty' debe ser un número entero positivo mayor a 0");
+    }
+    if (parsed > maxLimit) {
+        throw httpError(400, `El parámetro 'qty' no puede superar el límite máximo de ${maxLimit}`);
+    }
+    return parsed;
+};
