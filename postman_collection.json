@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "ShipNow API (Módulo 1 & 2)",
-    "description": "Colección oficial de ShipNow API para Backend III (Coderhouse).\nIncluye Users, Sessions, Products y el Módulo de Mocking y Logística (Mocks en memoria y Seed controlado).",
+    "name": "ShipNow API (Módulos 1, 2 & 3)",
+    "description": "Colección oficial de ShipNow API para Backend III (Coderhouse).\nIncluye Users, Sessions, Products, Módulo de Mocking y Logística, y Carpeta de Validación de Errores Centralizados (Preentrega 3).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -576,6 +576,359 @@
               ]
             },
             "description": "Variante enviando qty en el body JSON."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Errores Preentrega 3 (Uniform Error Responses)",
+      "item": [
+        {
+          "name": "400 - Qty no numérico (?qty=abc)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "abc"
+                }
+              ]
+            },
+            "description": "Devuelve 400 Bad Request con código INVALID_MOCK_QUANTITY."
+          }
+        },
+        {
+          "name": "400 - Qty repetido (?qty=2&qty=4)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=2&qty=4",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "2"
+                },
+                {
+                  "key": "qty",
+                  "value": "4"
+                }
+              ]
+            },
+            "description": "Rechaza parámetros repetidos con INVALID_MOCK_QUANTITY."
+          }
+        },
+        {
+          "name": "400 - Qty superior al límite (?qty=51)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=51",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "51"
+                }
+              ]
+            },
+            "description": "Rechaza cantidades superiores a 50 con INVALID_MOCK_QUANTITY."
+          }
+        },
+        {
+          "name": "400 - Producto con datos inválidos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Devuelve 400 Bad Request con INVALID_INPUT_DATA."
+          }
+        },
+        {
+          "name": "400 - Producto con ID inválido (formato no ObjectId)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/id-invalido-123",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "id-invalido-123"
+              ]
+            },
+            "description": "Devuelve 400 Bad Request con INVALID_ID."
+          }
+        },
+        {
+          "name": "400 - JSON malformado (body roto)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"invalido",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "register"
+              ]
+            },
+            "description": "Devuelve 400 Bad Request con INVALID_JSON_BODY capturado por errorHandler."
+          }
+        },
+        {
+          "name": "401 - Seed sin autenticación",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "3"
+                }
+              ]
+            },
+            "description": "Devuelve 401 Unauthorized con AUTHENTICATION_REQUIRED."
+          }
+        },
+        {
+          "name": "401 - Login con credenciales incorrectas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"inexistente@shipnow.com\",\n  \"password\": \"wrongpass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "login"
+              ]
+            },
+            "description": "Devuelve 401 Unauthorized con INVALID_CREDENTIALS."
+          }
+        },
+        {
+          "name": "403 - Seed con usuario común (sin rol admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mocks/seed?qty=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mocks",
+                "seed"
+              ],
+              "query": [
+                {
+                  "key": "qty",
+                  "value": "3"
+                }
+              ]
+            },
+            "description": "Devuelve 403 Forbidden con INSUFFICIENT_PERMISSIONS."
+          }
+        },
+        {
+          "name": "403 - Crear producto con usuario común",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Caja Prohibida\",\n  \"description\": \"Intento no autorizado\",\n  \"price\": 1000,\n  \"stock\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Devuelve 403 Forbidden con INSUFFICIENT_PERMISSIONS."
+          }
+        },
+        {
+          "name": "404 - Producto inexistente (ID válido)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/64f1a2b3c4d5e6f7a8b9c0d1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "64f1a2b3c4d5e6f7a8b9c0d1"
+              ]
+            },
+            "description": "Devuelve 404 Not Found con PRODUCT_NOT_FOUND."
+          }
+        },
+        {
+          "name": "404 - Ruta inexistente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ruta-que-no-existe-en-el-servidor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ruta-que-no-existe-en-el-servidor"
+              ]
+            },
+            "description": "Devuelve 404 Not Found con ROUTE_NOT_FOUND generado por notFoundHandler."
+          }
+        },
+        {
+          "name": "409 - Registro con email duplicado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Duplicado\",\n  \"last_name\": \"Usuario\",\n  \"email\": \"admin@shipnow.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sessions",
+                "register"
+              ]
+            },
+            "description": "Devuelve 409 Conflict con DUPLICATE_RESOURCE."
           }
         }
       ]

@@ -1,11 +1,10 @@
 import { usersRepository } from "../repositories/users.repository.js";
-import { USER_ROLES } from "../constants/index.js";
+import { USER_ROLES, ERROR_DICTIONARY } from "../constants/index.js";
 import { createHash } from "../utils/hash.js";
-import { httpError } from "../utils/errors.js";
-import { assertBodyObject, assertValidId, isNonEmptyString } from "../utils/validation.js";
+import { AppError } from "../utils/errors.js";
+import { assertBodyObject, assertValidId, isNonEmptyString, assertPassword } from "../utils/validation.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 6;
 
 /**
  * Servicio de Usuarios para ShipNow API.
@@ -20,7 +19,9 @@ export class UsersService {
         assertValidId(id);
         const user = await usersRepository.getById(id);
         if (!user) {
-            throw httpError(404, "Usuario no encontrado");
+            throw new AppError(ERROR_DICTIONARY.USER_NOT_FOUND, "Usuario no encontrado", {
+                details: { field: "id" },
+            });
         }
         return user;
     }
@@ -30,27 +31,31 @@ export class UsersService {
         const { first_name, last_name, email, password, role } = userData;
 
         if (!isNonEmptyString(first_name) || !isNonEmptyString(last_name) || !isNonEmptyString(email) || typeof password !== "string" || password === "") {
-            throw httpError(400, "Todos los campos obligatorios deben completarse con texto válido");
+            throw new AppError(ERROR_DICTIONARY.INVALID_INPUT_DATA, "Todos los campos obligatorios deben completarse con texto válido");
         }
 
         const normalizedEmail = email.trim().toLowerCase();
         if (!EMAIL_REGEX.test(normalizedEmail)) {
-            throw httpError(400, "El formato del correo electrónico no es válido");
+            throw new AppError(ERROR_DICTIONARY.INVALID_INPUT_DATA, "El formato del correo electrónico no es válido", {
+                details: { field: "email" },
+            });
         }
 
-        if (password.length < MIN_PASSWORD_LENGTH) {
-            throw httpError(400, `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`);
-        }
+        assertPassword(password, { registration: true });
 
         const existingUser = await usersRepository.getByEmail(normalizedEmail);
         if (existingUser) {
-            throw httpError(409, "Ya existe un usuario registrado con ese email");
+            throw new AppError(ERROR_DICTIONARY.DUPLICATE_RESOURCE, "Ya existe un usuario registrado con ese email", {
+                details: { field: "email" },
+            });
         }
 
         let assignedRole = USER_ROLES.USER;
         if (role !== undefined) {
             if (typeof role !== "string" || !Object.values(USER_ROLES).includes(role)) {
-                throw httpError(400, `Rol no válido. Roles permitidos: ${Object.values(USER_ROLES).join(", ")}`);
+                throw new AppError(ERROR_DICTIONARY.INVALID_INPUT_DATA, `Rol no válido. Roles permitidos: ${Object.values(USER_ROLES).join(", ")}`, {
+                    details: { field: "role", allowed: Object.values(USER_ROLES) },
+                });
             }
             assignedRole = role;
         }

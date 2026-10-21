@@ -29,3 +29,5 @@ export const DELIVERY_STATUS = Object.freeze({
     COMPLETED: "completed",
     FAILED: "failed",
 });
+
+export { ERROR_DICTIONARY } from "./errors.constants.js";

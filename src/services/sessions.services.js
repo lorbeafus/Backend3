@@ -1,9 +1,9 @@
 import { usersRepository } from "../repositories/users.repository.js";
 import { usersService } from "./users.services.js";
-import { USER_ROLES } from "../constants/index.js";
+import { USER_ROLES, ERROR_DICTIONARY } from "../constants/index.js";
 import { isValidPassword } from "../utils/hash.js";
-import { httpError } from "../utils/errors.js";
-import { assertBodyObject, isNonEmptyString } from "../utils/validation.js";
+import { AppError } from "../utils/errors.js";
+import { assertBodyObject, isNonEmptyString, assertPassword } from "../utils/validation.js";
 
 /**
  * Servicio de Sesiones para ShipNow API.
@@ -33,17 +33,19 @@ export class SessionsService {
      */
     async login({ email, password } = {}) {
         if (!isNonEmptyString(email) || typeof password !== "string" || password === "") {
-            throw httpError(400, "Email y contraseña son obligatorios");
+            throw new AppError(ERROR_DICTIONARY.INVALID_INPUT_DATA, "Email y contraseña son obligatorios");
         }
+
+        assertPassword(password);
 
         const user = await usersRepository.getByEmail(email.trim().toLowerCase());
         if (!user) {
-            throw httpError(401, "Credenciales inválidas");
+            throw new AppError(ERROR_DICTIONARY.INVALID_CREDENTIALS, "Credenciales inválidas");
         }
 
         const validPassword = await isValidPassword(password, user.password);
         if (!validPassword) {
-            throw httpError(401, "Credenciales inválidas");
+            throw new AppError(ERROR_DICTIONARY.INVALID_CREDENTIALS, "Credenciales inválidas");
         }
 
         const { password: _hash, ...safeUser } = user;

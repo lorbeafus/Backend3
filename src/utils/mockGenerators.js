@@ -5,7 +5,9 @@ import {
     ORDER_STATUS,
     ORDER_PRIORITY,
     DELIVERY_STATUS,
+    ERROR_DICTIONARY,
 } from "../constants/index.js";
+import { AppError } from "./errors.js";
 
 /**
  * Generador de usuarios simulados.
@@ -100,11 +102,18 @@ export const generateMockDelivery = ({ orderId, orderStatus, driverId = null, fi
         [ORDER_STATUS.CANCELLED]: DELIVERY_STATUS.FAILED,
     };
     if (!Object.hasOwn(deliveryStatusByOrder, orderStatus)) {
-        throw new Error("Estado de pedido inválido para generar una entrega");
+        throw new AppError(
+            ERROR_DICTIONARY.INVALID_DOMAIN_STATE,
+            "Estado de pedido inválido para generar una entrega",
+            { details: { received: orderStatus, allowed: Object.keys(deliveryStatusByOrder) } }
+        );
     }
     const status = deliveryStatusByOrder[orderStatus];
     if ([DELIVERY_STATUS.IN_PROGRESS, DELIVERY_STATUS.COMPLETED].includes(status) && !driverId) {
-        throw new Error("Una entrega en curso o completada requiere un repartidor");
+        throw new AppError(
+            ERROR_DICTIONARY.INVALID_DOMAIN_STATE,
+            "Una entrega en curso o completada requiere un repartidor"
+        );
     }
 
     return {

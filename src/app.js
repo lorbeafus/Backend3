@@ -2,6 +2,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import passport from "passport";
 import { initializePassport } from "./config/passport.config.js";
+import { notFoundHandler } from "./middlewares/notFound.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import productsRouter from "./routes/products.routes.js";
 import usersRouter from "./routes/users.routes.js";
@@ -29,6 +30,9 @@ app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/mocks", mocksRouter);
+
+// Middleware para rutas inexistentes (404)
+app.use(notFoundHandler);
 
 // Middleware centralizado de gestión de errores
 app.use(errorHandler);

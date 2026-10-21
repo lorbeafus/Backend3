@@ -1,8 +1,9 @@
 # ShipNow API
 
-API REST de ShipNow adaptada para las pre-entregas del curso **Backend III** (Coderhouse).
+API REST de ShipNow para las pre-entregas del curso **Backend III** (Coderhouse).
 - **Módulo 1:** Arquitectura profesional por capas, configuración centralizada estricta y entidades **Users**, **Sessions** y **Products**.
-- **Módulo 2:** Módulo de mocking logístico (**Users**, **Drivers**, **Orders**, **Deliveries**) con generación en memoria y carga controlada (`seed`) en MongoDB.
+- **Módulo 2:** Módulo de mocking logístico (**Users**, **Drivers**, **Orders**, **Deliveries**) con generación en memoria y carga controlada (`seed`) secuencial en MongoDB.
+- **Módulo 3 (Tercera Preentrega):** Sistema centralizado de manejo de errores HTTP mediante errores personalizados (`AppError`), diccionario de errores semánticos (`ERROR_DICTIONARY`), middleware global normalizador y formato de respuesta uniforme en todos los módulos.
 
 ## Tecnologías y Requisitos
 
@@ -15,14 +16,17 @@ API REST de ShipNow adaptada para las pre-entregas del curso **Backend III** (Co
 ## Arquitectura por capas
 
 ```text
-Router → Controller → Service → Repository → Model / MongoDB
+HTTP Request → Router → Middleware(s) → Controller → Service → Repository → Model / MongoDB
+      │                                                   │
+      └────────────────── errorHandler ← AppError ────────┘
 ```
 
 | Capa | Carpeta | Responsabilidad |
 | :--- | :--- | :--- |
 | Router | `src/routes/` | Define paths y asocia middlewares de autenticación/roles (`authMiddleware`, `authorizeRoles`). |
-| Controller | `src/controllers/` | Capa HTTP: lee `req`, envía `res`, status codes y deriva excepciones con `next(err)`. No importa Mongoose ni modelos. |
-| Service | `src/services/` | Validaciones de tipos y negocio, lógica de dominio, coordinación de entidades y generación de mocks. No conoce `req`/`res` ni importa Mongoose. |
+| Middleware | `src/middlewares/` | Autenticación Passport, autorización de roles, captura de 404 (`notFoundHandler`) y manejo centralizado de errores (`errorHandler`). |
+| Controller | `src/controllers/` | Capa HTTP: lee `req`, envía `res`, status codes y deriva excepciones mediante `next(err)`. No importa Mongoose ni modelos ni construye respuestas de error manuales. |
+| Service | `src/services/` | Validaciones de tipos y negocio, lógica de dominio, coordinación de entidades y generación de mocks. Lanza `AppError` con definiciones del diccionario. No conoce `req`/`res`. |
 | Repository | `src/repositories/` | Único punto de acceso a Mongoose: consultas, proyecciones (`-password` por defecto en usuarios), filtros y persistencia secuencial ordenada en base de datos. |
 | Model | `src/models/` | Esquemas Mongoose, tipos y restricciones de integridad. |
 
@@ -31,24 +35,30 @@ Router → Controller → Service → Repository → Model / MongoDB
 ```text
 SHIPNOW/
 ├── src/
-│   ├── app.js                      # Express, middlewares globales y routers montados
-│   ├── server.js                   # Conexión asíncrona a MongoDB y arranque del servidor
+│   ├── app.js                          # Express, middlewares globales, rutas y middlewares de error
+│   ├── server.js                       # Conexión asíncrona a MongoDB y arranque del servidor
 │   ├── config/
-│   │   ├── env.config.js           # Carga dotenv y validación estricta al inicio
-│   │   ├── index.js                # Re-exporta config
-│   │   ├── database.js             # Conexión a MongoDB
-│   │   └── passport.config.js      # Estrategias register, login y current (JWT en cookie)
-│   ├── constants/index.js          # USER_ROLES, PRODUCT_STATUS, ORDER_STATUS, ORDER_PRIORITY, DELIVERY_STATUS
-│   ├── controllers/                # products, users, sessions, mocks
-│   ├── dto/                        # UserDTO, CurrentUserDTO (protección de passwords)
-│   ├── middlewares/                # auth (JWT + roles), passport, error.middleware
-│   ├── models/                     # user.model.js, product.model.js, order.model.js, delivery.model.js
-│   ├── repositories/               # users, products, orders, deliveries, mocks
-│   ├── routes/                     # products, users, sessions, mocks
-│   ├── services/                   # products, users, sessions, mocks
-│   └── utils/                      # hash, jwt, errors, validation, mockGenerators
+│   │   ├── env.config.js               # Carga dotenv y validación estricta al inicio
+│   │   ├── index.js                    # Re-exporta config
+│   │   ├── database.js                 # Conexión a MongoDB
+│   │   └── passport.config.js          # Estrategias register, login y current (JWT en cookie)
+│   ├── constants/
+│   │   ├── index.js                    # Re-exporta roles, estados y diccionario de errores
+│   │   └── errors.constants.js         # ERROR_DICTIONARY centralizado
+│   ├── controllers/                    # products, users, sessions, mocks
+│   ├── dto/                            # UserDTO, CurrentUserDTO (protección de passwords)
+│   ├── middlewares/
+│   │   ├── auth.middleware.js          # authMiddleware y authorizeRoles delegando en errorHandler
+│   │   ├── passport.middleware.js      # passportCall con traducción a AppError
+│   │   ├── notFound.middleware.js      # Middleware 404 para rutas inexistentes
+│   │   └── error.middleware.js         # errorHandler centralizado y normalizador único
+│   ├── models/                         # user.model.js, product.model.js, order.model.js, delivery.model.js
+│   ├── repositories/                   # users, products, orders, deliveries, mocks
+│   ├── routes/                         # products, users, sessions, mocks
+│   ├── services/                       # products, users, sessions, mocks
+│   └── utils/                          # hash, jwt, errors (AppError, MockSeedError), validation, mockGenerators
 ├── .env.example
-├── postman_collection.json
+├── postman_collection.json             # Colección actualizada con tests de éxito y casos de error
 └── package.json
 ```
 
@@ -76,43 +86,212 @@ npm run dev               # node --watch src/server.js
 npm start                 # node src/server.js
 ```
 
-## Constantes del Dominio (`src/constants/index.js`)
+---
 
-Todos los objetos están inmutabilizados mediante `Object.freeze`:
+## Módulo 3: Sistema Centralizado de Errores
 
-```javascript
-export const USER_ROLES = Object.freeze({
-    ADMIN: "admin",
-    USER: "user",
-    DRIVER: "driver",
-});
+En cumplimiento con los requerimientos de la **Tercera Preentrega**, todos los errores HTTP de la API se gestionan de forma unificada sin respuestas manuales dispersas:
 
-export const PRODUCT_STATUS = Object.freeze({
-    AVAILABLE: "available",
-    OUT_OF_STOCK: "out_of_stock",
-});
+### 1. Diccionario Centralizado (`src/constants/errors.constants.js`)
 
-export const ORDER_STATUS = Object.freeze({
-    PENDING: "pending",
-    IN_TRANSIT: "in_transit",
-    DELIVERED: "delivered",
-    CANCELLED: "cancelled",
-});
+Define códigos semánticos estables, estados HTTP y mensajes estándar:
 
-export const ORDER_PRIORITY = Object.freeze({
-    LOW: "low",
-    MEDIUM: "medium",
-    HIGH: "high",
-    URGENT: "urgent",
-});
+| Código de Error (`code`) | HTTP Status | Situación de Dominio |
+| :--- | :---: | :--- |
+| `INVALID_INPUT_DATA` | `400` | Campos obligatorios vacíos, formatos erróneos o filtros inválidos. |
+| `INVALID_ID` | `400` | Formato de ObjectId inválido o cast fallido de Mongoose. |
+| `INVALID_JSON_BODY` | `400` | Cuerpo de petición malformado o no correspondiente a un objeto JSON. |
+| `INVALID_MOCK_QUANTITY` | `400` | Parámetro `qty` repetido, negativo, no entero o superior al límite. |
+| `INVALID_DOMAIN_STATE` | `400` | Estado o transición no permitida en entidades de dominio (ej. entrega sin repartidor). |
+| `AUTHENTICATION_REQUIRED` | `401` | Petición sin credenciales o cookie de sesión ausente en rutas protegidas. |
+| `TOKEN_INVALID_OR_EXPIRED` | `401` | Token JWT manipulado, expirado o con firma incorrecta. |
+| `INVALID_CREDENTIALS` | `401` | Combinación incorrecta de email o contraseña en `/api/sessions/login`. |
+| `INSUFFICIENT_PERMISSIONS` | `403` | Usuario autenticado intentando acceder a recursos restringidos a otro rol. |
+| `SEED_FORBIDDEN_IN_PRODUCTION` | `403` | Intento de ejecución de carga masiva (`seed`) con `NODE_ENV=production`. |
+| `USER_NOT_FOUND` | `404` | Identificador de usuario inexistente en MongoDB. |
+| `PRODUCT_NOT_FOUND` | `404` | Identificador de producto inexistente en MongoDB. |
+| `ORDER_NOT_FOUND` | `404` | Identificador de pedido inexistente en MongoDB. |
+| `ROUTE_NOT_FOUND` | `404` | Endpoint o método HTTP no registrado en Express. |
+| `DUPLICATE_RESOURCE` | `409` | Colisión de clave única (ej. email duplicado o colisión en seed). |
+| `MOCK_GENERATION_FAILED` | `500` | Error inesperado durante la generación en memoria. |
+| `MOCK_PERSISTENCE_FAILED` | `500` | Error de escritura en MongoDB durante el proceso de seed. |
+| `INTERNAL_SERVER_ERROR` | `500` | Excepciones no controladas o fallos imprevistos de infraestructura. |
 
-export const DELIVERY_STATUS = Object.freeze({
-    ASSIGNED: "assigned",
-    IN_PROGRESS: "in_progress",
-    COMPLETED: "completed",
-    FAILED: "failed",
-});
+### 2. Clases de Error Personalizadas (`src/utils/errors.js`)
+
+- **`AppError`**: Clase base que extiende `Error`, recibiendo una entrada de `ERROR_DICTIONARY` y opciones como `details`, `cause`, `phase` e `insertedCounts`.
+- **`MockSeedError`**: Especialización para fallos parciales de persistencia en seed que conserva las escrituras confirmadas.
+- **`httpError`**: Adaptador retrocompatible que mapea códigos de estado al diccionario centralizado devolviendo instancias de `AppError`.
+
+### 3. Formato Uniforme de Respuesta
+
+Todas las respuestas de error emitidas por la API siguen estrictamente el mismo esquema JSON:
+
+```json
+{
+  "status": "error",
+  "statusCode": 400,
+  "message": "La cantidad de mocks debe ser un número entero positivo dentro de los límites permitidos",
+  "error": {
+    "code": "INVALID_MOCK_QUANTITY",
+    "message": "La cantidad de mocks debe ser un número entero positivo dentro de los límites permitidos",
+    "details": {
+      "field": "qty",
+      "limit": 50
+    }
+  }
+}
 ```
+
+#### Lista blanca de `details` (Protección contra filtraciones)
+El middleware aplica una lista blanca estricta (`ALLOWED_DETAIL_KEYS`) para construir `error.details`:
+- Claves permitidas: `field`, `fields`, `expected`, `received`, `allowed`, `limit`, `min`, `max`, `method`, `path`, `phase`, `insertedCounts`, `errors`.
+- **Seguridad**: Se bloquea cualquier objeto de conexión de MongoDB, consultas internas, stack traces, variables de entorno, contraseñas y hashes bcrypt.
+
+#### Errores inesperados (500)
+Ante excepciones no controladas:
+- Se registra el diagnóstico completo con stack y `cause` en la consola del servidor (`console.error`).
+- El cliente recibe un código `500 Internal Server Error`, con mensaje genérico `"Error interno del servidor"`. En fallos parciales de seed, `details` conserva exclusivamente `phase` e `insertedCounts`; el resto de los errores internos devuelve `details: {}`. Nunca se envían mensajes internos de MongoDB ni valores rechazados en errores de validación.
+
+---
+
+## Ejemplos Reales de Respuestas de Error
+
+### 1. Validación de Datos (400 Bad Request)
+**Petición:** `POST /api/mocks/seed?qty=abc`
+```json
+{
+  "status": "error",
+  "statusCode": 400,
+  "message": "El parámetro 'qty' debe ser un número entero positivo mayor a 0",
+  "error": {
+    "code": "INVALID_MOCK_QUANTITY",
+    "message": "El parámetro 'qty' debe ser un número entero positivo mayor a 0",
+    "details": {
+      "field": "qty",
+      "min": 1
+    }
+  }
+}
+```
+
+### 2. Autenticación Requerida (401 Unauthorized)
+**Petición:** `POST /api/mocks/seed?qty=3` (sin cookie de sesión)
+```json
+{
+  "status": "error",
+  "statusCode": 401,
+  "message": "No autenticado",
+  "error": {
+    "code": "AUTHENTICATION_REQUIRED",
+    "message": "No autenticado",
+    "details": {}
+  }
+}
+```
+
+### 3. Permisos Insuficientes (403 Forbidden)
+**Petición:** `POST /api/products` (autenticado con rol `user`)
+```json
+{
+  "status": "error",
+  "statusCode": 403,
+  "message": "No tenés permisos para realizar esta acción",
+  "error": {
+    "code": "INSUFFICIENT_PERMISSIONS",
+    "message": "No tenés permisos para realizar esta acción",
+    "details": {
+      "received": "user",
+      "allowed": ["admin"]
+    }
+  }
+}
+```
+
+### 4. Recurso Inexistente (404 Not Found)
+**Petición:** `GET /api/products/64f1a2b3c4d5e6f7a8b9c0d1`
+```json
+{
+  "status": "error",
+  "statusCode": 404,
+  "message": "Producto no encontrado",
+  "error": {
+    "code": "PRODUCT_NOT_FOUND",
+    "message": "Producto no encontrado",
+    "details": {
+      "field": "id"
+    }
+  }
+}
+```
+
+### 5. Ruta Inexistente (404 Not Found)
+**Petición:** `GET /api/no-existe`
+```json
+{
+  "status": "error",
+  "statusCode": 404,
+  "message": "La ruta 'GET /api/no-existe' no existe en este servidor",
+  "error": {
+    "code": "ROUTE_NOT_FOUND",
+    "message": "La ruta 'GET /api/no-existe' no existe en este servidor",
+    "details": {
+      "method": "GET",
+      "path": "/api/no-existe"
+    }
+  }
+}
+```
+
+### 6. Recurso Duplicado (409 Conflict)
+**Petición:** `POST /api/sessions/register` (email ya existente)
+```json
+{
+  "status": "error",
+  "statusCode": 409,
+  "message": "Ya existe un usuario registrado con ese email",
+  "error": {
+    "code": "DUPLICATE_RESOURCE",
+    "message": "Ya existe un usuario registrado con ese email",
+    "details": {
+      "field": "email"
+    }
+  }
+}
+```
+
+### 7. Fallo Parcial de Seed en MongoDB (409 Conflict / 500)
+**Petición:** `POST /api/mocks/seed?qty=2` (con colisión única inducida en el 2º documento de la fase `users`)
+```json
+{
+  "status": "error",
+  "statusCode": 409,
+  "message": "Error en la carga de datos de prueba en la fase 'users': Ya existe un registro con esos datos únicos",
+  "error": {
+    "code": "DUPLICATE_RESOURCE",
+    "message": "Error en la carga de datos de prueba en la fase 'users': Ya existe un registro con esos datos únicos",
+    "details": {
+      "phase": "users",
+      "insertedCounts": {
+        "users": 1,
+        "drivers": 0,
+        "orders": 0,
+        "deliveries": 0
+      }
+    }
+  },
+  "phase": "users",
+  "insertedCounts": {
+    "users": 1,
+    "drivers": 0,
+    "orders": 0,
+    "deliveries": 0
+  }
+}
+```
+
+> [!WARNING]
+> **Aviso de pérdida de conexión en Seed**: Cada documento se inserta y confirma individualmente en orden estricto de dependencias. Una interrupción de red o reinicio del motor de base de datos durante la escritura puede dejar incierto el estado de la última operación en tránsito. Los contadores reportados en `insertedCounts` corresponden exclusivamente a escrituras confirmadas en el motor antes de la falla.
 
 ---
 
@@ -136,11 +315,9 @@ El estado de cada entrega se deriva del pedido asociado:
 | Pedido | Entrega |
 | :--- | :--- |
 | `pending` | `assigned` |
-| `in_transit` | `in_progress` |
-| `delivered` | `completed` |
+| `in_transit` | `in_progress` (requiere `driver`) |
+| `delivered` | `completed` (requiere `driver`) |
 | `cancelled` | `failed` |
-
-Las entregas en curso o completadas requieren un repartidor.
 
 ### Endpoints de Mocking
 
@@ -151,51 +328,6 @@ Las entregas en curso o completadas requieren un repartidor.
 | `GET` | `/api/mocks/orders?qty=10` | Público | Genera pedidos simulados y devuelve además los `related_users` referenciados. |
 | `GET` | `/api/mocks/deliveries?qty=10` | Público | Genera entregas simuladas y devuelve `related_orders`, `related_drivers` y `related_users`. |
 | `POST` | `/api/mocks/seed?qty=10` | Admin (`authMiddleware` + `ADMIN`) | Carga controlada persistente en MongoDB. Bloqueado en `production`. |
-
-### Parámetro `qty` y Validaciones
-- **Tipo:** Entero positivo (`1 <= qty <= 100` para GET; `1 <= qty <= 50` para POST `seed`).
-- Si se omite, toma por defecto `qty=10`.
-- Si se envía un valor no entero, menor a 1, un string no numérico, `null`, booleano, array o parámetro repetido (ej. `?qty=2&qty=3`), se rechaza con **`400 Bad Request`**.
-
-### Significado de `qty` en `POST /api/mocks/seed`
-El parámetro `qty` define el factor de escala de la simulación. Al enviar `qty = N`, se insertan:
-- `N` usuarios cliente (`role: "user"`).
-- `N` repartidores (`role: "driver"`).
-- `N` pedidos asociados a los usuarios insertados.
-- `N` entregas asociadas a los pedidos y repartidores insertados.
-- **Total insertado:** `4 * N` documentos.
-- **Contraseñas generadas:** Se crean con hash real de bcrypt (`mockPassword123`) para que los usuarios puedan autenticarse si se desea en pruebas.
-- **Anti-colisión:** Los correos electrónicos y códigos de seguimiento incorporan timestamps y sufijos aleatorios únicos para garantizar que múltiples ejecuciones de seed consecutivas no colisionen en índices únicos.
-
-### Comportamiento exacto ante fallos en Seed (MongoDB Standalone)
-La carga controlada en MongoDB se implementa mediante **persistencia secuencial explícita en orden estricto de dependencias** encapsulada en `MocksRepository`:
-1. `Fase 1: Users` (clientes)
-2. `Fase 2: Drivers` (repartidores)
-3. `Fase 3: Orders` (pedidos vinculados a usuarios existentes)
-4. `Fase 4: Deliveries` (entregas vinculadas a pedidos y repartidores existentes)
-
-**Comportamiento ante fallo parcial:**
-- Si ocurre un fallo en una fase intermedia (por ejemplo, fallo en la fase de `Orders` o `Deliveries`), la petición **NO informa éxito**. Responde con un código de error HTTP (`500`, `400` o `409` según corresponda) y no se reintenta automáticamente la carga para evitar duplicar usuarios o pedidos.
-- **Registros que pueden quedar insertados:** Quedan los documentos de fases anteriores y los documentos insertados antes del error dentro de la fase fallida. Cada documento se inserta y confirma individualmente; el primer fallo detiene la carga. Por ejemplo, si falla el segundo pedido, queda el primero además de los clientes y repartidores. La respuesta de error incluye `phase` e `insertedCounts`, con las escrituras confirmadas por colección. Ante una pérdida de conexión durante una escritura, el resultado de esa última operación puede ser incierto: los contadores solo incluyen escrituras confirmadas; se debe revisar la base antes de repetir la carga. No hay rollback ni reintento automático.
-- **Garantía de integridad referencial:** Gracias al orden secuencial unidireccional de dependencias, **nunca quedarán referencias huérfanas** (nunca habrá un pedido apuntando a un usuario inexistente ni una entrega apuntando a un pedido o repartidor inexistente).
-
-Ejemplo de respuesta exitosa (`POST /api/mocks/seed?qty=5`):
-```json
-{
-  "status": "success",
-  "payload": {
-    "inserted": {
-      "users": 5,
-      "drivers": 5,
-      "orders": 5,
-      "deliveries": 5,
-      "total": 20
-    },
-    "scale_qty": 5,
-    "message": "Carga de prueba ejecutada exitosamente (20 documentos insertados respetando integridad referencial)"
-  }
-}
-```
 
 ---
 
@@ -232,5 +364,26 @@ La colección actualizada se encuentra en `postman_collection.json` e incluye la
 4. **Products**
 5. **Mocks (Generación en memoria)**
 6. **Mocks (Seed controlada - Admin)**
+7. **Errores Preentrega 3 (Uniform Error Responses)**:
+   - `400 Bad Request - Qty inválido`
+   - `400 Bad Request - Qty repetido`
+   - `400 Bad Request - Producto con datos inválidos`
+   - `400 Bad Request - ID inválido`
+   - `400 Bad Request - JSON malformado`
+   - `401 Unauthorized - Seed sin sesión`
+   - `401 Unauthorized - Login credenciales incorrectas`
+   - `403 Forbidden - Seed con usuario común`
+   - `403 Forbidden - Crear producto con usuario común`
+   - `404 Not Found - Producto inexistente`
+   - `404 Not Found - Ruta inexistente`
+   - `409 Conflict - Registro email duplicado`
 
 Usa la variable de entorno `baseUrl` (default: `http://localhost:3000`). La cookie de autenticación se gestiona de forma automática en Postman tras el Login.
+
+### Contraseñas de usuarios
+El registro requiere al menos 6 caracteres y un máximo de 72 bytes UTF-8 (límite de bcrypt).
+El login también rechaza contraseñas que excedan los 72 bytes. Los caracteres multibyte
+ocupan más de un byte. Se rechazan contraseñas formadas únicamente por espacios;
+las demás se conservan exactamente como fueron enviadas, sin recortarlas.
+Las contraseñas largas creadas en versiones anteriores requieren restablecimiento: el login
+no acepta una entrada superior al límite ni la trunca silenciosamente.

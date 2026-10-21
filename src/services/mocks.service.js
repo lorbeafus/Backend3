@@ -1,7 +1,7 @@
 import { mocksRepository } from "../repositories/mocks.repository.js";
-import { USER_ROLES } from "../constants/index.js";
+import { USER_ROLES, ERROR_DICTIONARY } from "../constants/index.js";
 import { createHash } from "../utils/hash.js";
-import { httpError } from "../utils/errors.js";
+import { AppError, MockSeedError } from "../utils/errors.js";
 import { config } from "../config/index.js";
 import { parsePositiveIntegerQty } from "../utils/validation.js";
 import {
@@ -14,11 +14,12 @@ import {
 const DEFAULT_MOCK_PASSWORD = "mockPassword123";
 
 /**
- * Servicio de Mocking para ShipNow API (Preentrega 2 - Módulo 2).
+ * Servicio de Mocking para ShipNow API (Preentrega 3 - Módulo 3).
  * Provee:
  * 1. Generación de datos simulados en memoria (sin persistir en MongoDB).
  * 2. Carga controlada (seed) en MongoDB, delegada en mocksRepository,
  *    restringida a ADMIN y bloqueada en production.
+ * 3. Gestión y tipado de errores centralizados mediante AppError y MockSeedError.
  *
  * Arquitectura: Este servicio NO importa Mongoose ni manipula sesiones de base de datos.
  */
@@ -117,7 +118,10 @@ export class MocksService {
      */
     async seedDatabase(rawQty) {
         if (config.NODE_ENV === "production") {
-            throw httpError(403, "La generación de datos de prueba (seed) está estrictamente deshabilitada en el entorno de producción");
+            throw new AppError(
+                ERROR_DICTIONARY.SEED_FORBIDDEN_IN_PRODUCTION,
+                "La generación de datos de prueba (seed) está estrictamente deshabilitada en el entorno de producción"
+            );
         }
 
         const qty = parsePositiveIntegerQty(rawQty, 10, 50);
@@ -160,17 +164,32 @@ export class MocksService {
         } catch (error) {
             // Ante un fallo parcial en la inserción secuencial, no se informa éxito
             // ni se reintenta automáticamente para no duplicar datos
+            const isDuplicate = error.code === 11000 || error.cause?.code === 11000;
+            const isValidation = ["ValidationError", "CastError"].includes(error.name);
+
+            const errorDef = isDuplicate
+                ? ERROR_DICTIONARY.DUPLICATE_RESOURCE
+                : isValidation
+                    ? ERROR_DICTIONARY.INVALID_INPUT_DATA
+                    : ERROR_DICTIONARY.MOCK_PERSISTENCE_FAILED;
+
+            const statusCode = isDuplicate ? 409 : isValidation ? 400 : (error.statusCode || 500);
+
             const phaseMsg = error.phase ? ` en la fase '${error.phase}'` : "";
-            const countsMsg = error.insertedCounts
-                ? ` (documentos insertados antes del fallo: ${JSON.stringify(error.insertedCounts)})`
-                : "";
-            
-            const err = new Error(`Error en la carga de datos de prueba${phaseMsg}: ${error.message}${countsMsg}`);
-            err.statusCode = error.statusCode || (error.code === 11000 ? 409 :
-                ["ValidationError", "CastError"].includes(error.name) ? 400 : 500);
-            err.phase = error.phase;
-            err.insertedCounts = error.insertedCounts;
-            throw err;
+            const message = isDuplicate
+                ? `Error en la carga de datos de prueba${phaseMsg}: Ya existe un registro con esos datos únicos`
+                : `Error en la carga de datos de prueba${phaseMsg}: ${error.message}`;
+
+            throw new MockSeedError(errorDef, message, {
+                statusCode,
+                phase: error.phase,
+                insertedCounts: error.insertedCounts,
+                cause: error,
+                details: {
+                    phase: error.phase,
+                    insertedCounts: error.insertedCounts,
+                },
+            });
         }
     }
 }

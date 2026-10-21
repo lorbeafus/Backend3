@@ -1,9 +1,10 @@
 import passport from "passport";
-import { httpError } from "../utils/errors.js";
+import { AppError } from "../utils/errors.js";
+import { ERROR_DICTIONARY } from "../constants/index.js";
 
 /**
  * Invoca una estrategia de Passport y traduce el resultado a errores HTTP consistentes.
- * Los errores lanzados por los Services (con statusCode) pasan tal cual al errorHandler.
+ * Delega cualquier excepción al errorHandler centralizado mediante AppError.
  */
 export const passportCall = (strategy) => {
     return (req, res, next) => {
@@ -12,14 +13,36 @@ export const passportCall = (strategy) => {
 
             if (!user) {
                 if (strategy === "register") {
-                    // passport-local informa "Missing credentials" cuando faltan email o password
-                    return next(httpError(400, "Todos los campos son obligatorios"));
+                    return next(
+                        new AppError(
+                            ERROR_DICTIONARY.INVALID_INPUT_DATA,
+                            "Todos los campos son obligatorios"
+                        )
+                    );
                 }
                 if (strategy === "login") {
-                    return next(httpError(400, "Email y contraseña son obligatorios"));
+                    return next(
+                        new AppError(
+                            ERROR_DICTIONARY.INVALID_INPUT_DATA,
+                            "Email y contraseña son obligatorios"
+                        )
+                    );
                 }
-                const noToken = String(info?.message ?? info ?? "").includes("No auth token");
-                return next(httpError(401, noToken ? "No autenticado" : "Token inválido o expirado"));
+                const noToken = !req.cookies?.currentUser;
+                if (noToken) {
+                    return next(
+                        new AppError(
+                            ERROR_DICTIONARY.AUTHENTICATION_REQUIRED,
+                            "No autenticado"
+                        )
+                    );
+                }
+                return next(
+                    new AppError(
+                        ERROR_DICTIONARY.TOKEN_INVALID_OR_EXPIRED,
+                        "Token inválido o expirado"
+                    )
+                );
             }
 
             req.user = user;
