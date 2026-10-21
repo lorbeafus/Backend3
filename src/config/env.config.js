@@ -52,6 +52,9 @@ const validateEnvironment = () => {
 validateEnvironment();
 
 export const config = Object.freeze({
+    // Opcionales para la API; el comando seed:admin los valida al ejecutarse.
+    ADMIN_EMAIL: process.env.ADMIN_EMAIL?.trim().toLowerCase(),
+    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
     PORT: Number(process.env.PORT),
     NODE_ENV: process.env.NODE_ENV.trim(),
     MONGODB_URI: process.env.MONGODB_URI.trim(),

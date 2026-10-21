@@ -387,3 +387,36 @@ ocupan más de un byte. Se rechazan contraseñas formadas únicamente por espaci
 las demás se conservan exactamente como fueron enviadas, sin recortarlas.
 Las contraseñas largas creadas en versiones anteriores requieren restablecimiento: el login
 no acepta una entrada superior al límite ni la trunca silenciosamente.
+
+## Acceso de evaluación: crear un administrador en tu propia base
+
+La cuenta del autor no se distribuye ni se copia con el repositorio. Cada evaluador puede
+crear su administrador usando la base configurada en su `.env` (MongoDB local o Atlas).
+No es necesario modificar roles manualmente en MongoDB.
+
+1. Instalá las dependencias con `npm ci` y copiá `.env.example` a `.env` si todavía no existe.
+2. Completá las variables de la API (`PORT`, `NODE_ENV`, `MONGODB_URI`, `JWT_SECRET`)
+   y elegí tus propias credenciales en `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
+   Usá `NODE_ENV=development` o `test` y una base de evaluación.
+3. Ejecutá `npm run seed:admin`. El comando crea una cuenta ADMIN con contraseña
+   hasheada. No imprime la contraseña ni la guarda en archivos del repositorio.
+4. Ejecutá `npm start`. En Postman, enviá `POST /api/sessions/login` con:
+
+```json
+{
+  "email": "<el valor de ADMIN_EMAIL de tu .env>",
+  "password": "<el valor de ADMIN_PASSWORD de tu .env>"
+}
+```
+
+5. Postman conserva la cookie `currentUser`. Comprobá `GET /api/sessions/current`
+   (rol `admin`), luego probá `POST /api/mocks/seed?qty=2` y los errores del módulo 3.
+   `GET /api/mocks/users?qty=-1` debe responder 400 con `INVALID_MOCK_QUANTITY`.
+
+Las variables ADMIN son opcionales para arrancar la API; solo las exige este comando.
+La contraseña debe cumplir la política de registro documentada (incluido el máximo de
+72 bytes UTF-8). Si el administrador ya existe, repetir el comando no cambia nada,
+ni siquiera su contraseña. Si el email pertenece a un usuario sin rol ADMIN, el comando
+falla y no modifica ni promueve esa cuenta. Los fallos producen código de salida distinto
+de cero. El comando está bloqueado en producción y no se ejecuta automáticamente.
+El registro público sigue creando únicamente usuarios comunes. `.env` no se publica.
