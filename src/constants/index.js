@@ -31,3 +31,11 @@ export const DELIVERY_STATUS = Object.freeze({
 });
 
 export { ERROR_DICTIONARY } from "./errors.constants.js";
+
+// Única tabla compartida por la API real y los generadores de mocks.
+export const DELIVERY_STATUS_BY_ORDER = Object.freeze({
+    [ORDER_STATUS.PENDING]: DELIVERY_STATUS.ASSIGNED,
+    [ORDER_STATUS.IN_TRANSIT]: DELIVERY_STATUS.IN_PROGRESS,
+    [ORDER_STATUS.DELIVERED]: DELIVERY_STATUS.COMPLETED,
+    [ORDER_STATUS.CANCELLED]: DELIVERY_STATUS.FAILED,
+});

@@ -1,12 +1,13 @@
 {
   "name": "shipnow-api",
   "version": "1.0.0",
-  "description": "ShipNow API - Plataforma Log\u00edstica profesional con arquitectura por capas (Preentrega 1 M\u00f3dulo 1 Backend III Coderhouse)",
+  "description": "ShipNow API - pedidos y entregas con permisos, transiciones, mocks y errores",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "seed:admin": "node scripts/seed-admin.js"
+    "seed:admin": "node scripts/seed-admin.js",
+    "test:logistics": "node --test tests/logistics.test.js"
   },
   "keywords": [
     "express",

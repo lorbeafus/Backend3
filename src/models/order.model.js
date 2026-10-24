@@ -3,6 +3,7 @@ import { ORDER_STATUS, ORDER_PRIORITY } from "../constants/index.js";
 
 const orderItemSchema = new Schema(
     {
+        product: { type: Schema.Types.ObjectId, ref: "Product", default: null },
         product_name: {
             type: String,
             required: [true, "El nombre del producto es obligatorio"],
@@ -12,6 +13,7 @@ const orderItemSchema = new Schema(
             type: Number,
             required: [true, "La cantidad es obligatoria"],
             min: [1, "La cantidad debe ser al menos 1"],
+            validate: { validator: Number.isSafeInteger, message: "La cantidad debe ser entera" },
         },
         price: {
             type: Number,

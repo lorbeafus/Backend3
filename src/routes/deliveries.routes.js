@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { list, get, create, transition } from "../controllers/deliveries.controller.js";
+import { authMiddleware, authorizeRoles } from "../middlewares/auth.middleware.js";
+import { USER_ROLES } from "../constants/index.js";
+const router = Router();
+router.use(authMiddleware);
+router.get("/", list);
+router.get("/:id", get);
+router.post("/", authorizeRoles(USER_ROLES.ADMIN), create);
+router.patch("/:id/status", transition);
+export default router;

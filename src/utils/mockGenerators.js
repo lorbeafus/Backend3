@@ -5,6 +5,7 @@ import {
     ORDER_STATUS,
     ORDER_PRIORITY,
     DELIVERY_STATUS,
+    DELIVERY_STATUS_BY_ORDER,
     ERROR_DICTIONARY,
 } from "../constants/index.js";
 import { AppError } from "./errors.js";
@@ -95,20 +96,14 @@ export const generateMockOrder = ({ userId, fixedId = null } = {}) => {
  */
 export const generateMockDelivery = ({ orderId, orderStatus, driverId = null, fixedId = null } = {}) => {
     const id = fixedId || new mongoose.Types.ObjectId().toString();
-    const deliveryStatusByOrder = {
-        [ORDER_STATUS.PENDING]: DELIVERY_STATUS.ASSIGNED,
-        [ORDER_STATUS.IN_TRANSIT]: DELIVERY_STATUS.IN_PROGRESS,
-        [ORDER_STATUS.DELIVERED]: DELIVERY_STATUS.COMPLETED,
-        [ORDER_STATUS.CANCELLED]: DELIVERY_STATUS.FAILED,
-    };
-    if (!Object.hasOwn(deliveryStatusByOrder, orderStatus)) {
+    if (!Object.hasOwn(DELIVERY_STATUS_BY_ORDER, orderStatus)) {
         throw new AppError(
             ERROR_DICTIONARY.INVALID_DOMAIN_STATE,
             "Estado de pedido inválido para generar una entrega",
-            { details: { received: orderStatus, allowed: Object.keys(deliveryStatusByOrder) } }
+            { details: { received: orderStatus, allowed: Object.keys(DELIVERY_STATUS_BY_ORDER) } }
         );
     }
-    const status = deliveryStatusByOrder[orderStatus];
+    const status = DELIVERY_STATUS_BY_ORDER[orderStatus];
     if ([DELIVERY_STATUS.IN_PROGRESS, DELIVERY_STATUS.COMPLETED].includes(status) && !driverId) {
         throw new AppError(
             ERROR_DICTIONARY.INVALID_DOMAIN_STATE,

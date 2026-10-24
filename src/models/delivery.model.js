@@ -3,6 +3,8 @@ import { DELIVERY_STATUS } from "../constants/index.js";
 
 const deliverySchema = new Schema(
     {
+        // Exclusivo de entregas reales; los mocks históricos no requieren migración.
+        assignment_key: { type: String, unique: true, sparse: true, select: false },
         tracking_code: {
             type: String,
             required: [true, "El código de seguimiento es obligatorio"],

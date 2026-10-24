@@ -1,3 +1,5 @@
+import ordersRouter from "./routes/orders.routes.js";
+import deliveriesRouter from "./routes/deliveries.routes.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import passport from "passport";
@@ -30,6 +32,8 @@ app.use("/api/products", productsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/mocks", mocksRouter);
+app.use("/api/orders", ordersRouter);
+app.use("/api/deliveries", deliveriesRouter);
 
 // Middleware para rutas inexistentes (404)
 app.use(notFoundHandler);

@@ -5,22 +5,15 @@ import { deliveryModel } from "../models/delivery.model.js";
  * Encapsula el acceso directo a MongoDB/Mongoose para la entidad Delivery.
  */
 export class DeliveriesRepository {
-    async getAll({ filter = {}, projection = null, sort = { createdAt: -1 } } = {}) {
-        return await deliveryModel
-            .find(filter, projection)
-            .sort(sort)
-            .populate("order")
-            .populate("driver", "-password")
-            .lean();
+    async getAll({ filter = {}, skip = 0, limit = 20 } = {}) {
+        return deliveryModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit)
+            .populate("order").populate("driver", "first_name last_name role").lean();
     }
-
-    async getById(id, projection = null) {
-        return await deliveryModel
-            .findById(id, projection)
-            .populate("order")
-            .populate("driver", "-password")
-            .lean();
+    async getById(id) {
+        return deliveryModel.findById(id).populate("order").populate("driver", "first_name last_name role").lean();
     }
+    async getForOrder(order) { return deliveryModel.findOne({ order }).lean(); }
+    async orderIdsForDriver(driver) { return (await deliveryModel.find({ driver }, "order").lean()).map(d => d.order); }
 
     async create(deliveryData) {
         return await deliveryModel.create(deliveryData);

@@ -4,6 +4,8 @@
  * para todas las situaciones de dominio de la plataforma.
  */
 export const ERROR_DICTIONARY = Object.freeze({
+    DELIVERY_NOT_FOUND: Object.freeze({ code: "DELIVERY_NOT_FOUND", statusCode: 404, message: "Entrega no encontrada" }),
+    DOMAIN_CONFLICT: Object.freeze({ code: "DOMAIN_CONFLICT", statusCode: 409, message: "El recurso cambió o la operación entra en conflicto con su estado actual" }),
     // -------------------------------------------------------------
     // 400 Bad Request - Validaciones y datos de entrada
     // -------------------------------------------------------------
