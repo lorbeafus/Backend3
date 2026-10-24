@@ -1101,6 +1101,19 @@
           }
         }
       ]
+    },
+    {
+      "name": "Logger (Módulo 4)",
+      "item": [
+        {
+          "name": "Emitir seis niveles (ADMIN, no production)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/loggerTest"
+          }
+        }
+      ]
     }
   ]
 }

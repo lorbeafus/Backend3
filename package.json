@@ -1,12 +1,13 @@
 {
   "name": "shipnow-api",
   "version": "1.0.0",
-  "description": "ShipNow API - pedidos y entregas con permisos, transiciones, mocks y errores",
+  "description": "ShipNow API - log\u00edstica por capas, mocks, errores y logging (Backend III)",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed:admin": "node scripts/seed-admin.js",
+    "test:module4": "node --test tests/module4.test.js",
     "test:logistics": "node --test tests/logistics.test.js"
   },
   "keywords": [
@@ -30,6 +31,7 @@
     "mongoose": "^9.7.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "passport-local": "^1.0.0"
+    "passport-local": "^1.0.0",
+    "winston": "^3.19.0"
   }
 }

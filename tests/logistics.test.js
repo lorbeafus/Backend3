@@ -23,6 +23,7 @@ test("Logística: pedidos, entregas, permisos y transiciones en base aislada", a
     const { deliveryModel } = await import("../src/models/delivery.model.js");
     const { productModel } = await import("../src/models/product.model.js");
     const { ordersRepository } = await import("../src/repositories/orders.repository.js");
+    const { finishLogger } = await import("../src/config/logger.js");
     let server;
     const results = [];
     const check = (value, description) => { assert.ok(value, description); results.push(description); };
@@ -92,6 +93,7 @@ test("Logística: pedidos, entregas, permisos y transiciones en base aislada", a
         if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
         if (mongoose.connection.readyState === 1) { assert.equal(mongoose.connection.name, dbName); await mongoose.connection.dropDatabase(); }
         await mongoose.disconnect();
+        await finishLogger();
         await rm(temp, { recursive: true, force: true });
     }
     process.stdout.write(`Verificaciones de logística: ${results.length}. Base temporal eliminada.\n`);

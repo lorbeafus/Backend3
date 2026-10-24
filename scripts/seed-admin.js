@@ -1,3 +1,4 @@
+import { logger, finishLogger } from "../src/config/logger.js";
 import mongoose from "mongoose";
 import { config } from "../src/config/index.js";
 import { USER_ROLES } from "../src/constants/index.js";
@@ -25,7 +26,7 @@ async function seedAdmin() {
         if (existing.role !== USER_ROLES.ADMIN) {
             throw new Error("El email pertenece a un usuario sin rol ADMIN; no se modificó su cuenta");
         }
-        console.log("El administrador ya existe. No se cambió su contraseña ni sus datos.");
+        logger.info("El administrador ya existe. No se cambió su contraseña ni sus datos.");
         return;
     }
     try {
@@ -41,13 +42,13 @@ async function seedAdmin() {
         if (error.code === 11000 || error.code === "DUPLICATE_RESOURCE") {
             const concurrent = await usersRepository.getByEmail(config.ADMIN_EMAIL, "-password");
             if (concurrent?.role === USER_ROLES.ADMIN) {
-                console.log("El administrador ya existe. No se cambió su contraseña ni sus datos.");
+                logger.info("El administrador ya existe. No se cambió su contraseña ni sus datos.");
                 return;
             }
         }
         throw error;
     }
-    console.log("Administrador creado. Iniciá sesión con ADMIN_EMAIL y ADMIN_PASSWORD configurados localmente.");
+    logger.info("Administrador creado. Iniciá sesión con ADMIN_EMAIL y ADMIN_PASSWORD configurados localmente.");
 }
 
 try {
@@ -56,8 +57,9 @@ try {
     // No imprimir errores crudos de MongoDB: podrían incluir URI o valores sensibles.
     const safe = error.name === "AppError" ||
         ["seed:admin solo", "Configurá ADMIN_EMAIL", "ADMIN_EMAIL debe", "El email pertenece"].some(prefix => error.message?.startsWith(prefix));
-    console.error(safe ? error.message : "No se pudo crear el administrador. Revisá la conexión y la configuración local.");
+    logger.error(safe ? error.message : "No se pudo crear el administrador. Revisá la conexión y la configuración local.");
     process.exitCode = 1;
 } finally {
     await mongoose.disconnect();
+    await finishLogger();
 }

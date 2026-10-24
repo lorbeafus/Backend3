@@ -1,7 +1,15 @@
 import dotenv from "dotenv";
+import { logger, configureLogger } from "./logger.js";
+import { fileURLToPath } from "node:url";
 
 // Cargar variables de entorno desde el archivo .env
-dotenv.config();
+dotenv.config({ quiet: true });
+const logDirectory = process.env.LOG_DIR?.trim() || fileURLToPath(new URL("../../logs", import.meta.url));
+const logMaxSize = Number(process.env.LOG_MAX_SIZE || 5242880);
+const logMaxFiles = Number(process.env.LOG_MAX_FILES || 5);
+configureLogger({ nodeEnv: process.env.NODE_ENV, logDir: logDirectory,
+    maxSize: Number.isSafeInteger(logMaxSize) && logMaxSize >= 1024 ? logMaxSize : 5242880,
+    maxFiles: Number.isSafeInteger(logMaxFiles) && logMaxFiles >= 2 ? logMaxFiles : 5 });
 
 /**
  * Validador estricto de variables de entorno críticas.
@@ -41,7 +49,10 @@ const validateEnvironment = () => {
         errors.push("JWT_SECRET es obligatoria para la seguridad de autenticación.");
     }
 
+    if (!Number.isSafeInteger(logMaxSize) || logMaxSize < 1024 || logMaxSize > 104857600) errors.push("LOG_MAX_SIZE debe ser un entero entre 1024 y 104857600 bytes");
+    if (!Number.isSafeInteger(logMaxFiles) || logMaxFiles < 2 || logMaxFiles > 30) errors.push("LOG_MAX_FILES debe ser un entero entre 2 y 30");
     if (errors.length > 0) {
+        logger.fatal("Configuración inicial inválida", { event: "configuration_failed", validationCount: errors.length });
         throw new Error(
             `\n[FATAL] Error de configuración de variables de entorno al iniciar:\n - ${errors.join("\n - ")}\nVerificá tu archivo .env contra .env.example.\n`
         );
@@ -55,6 +66,9 @@ export const config = Object.freeze({
     // Opcionales para la API; el comando seed:admin los valida al ejecutarse.
     ADMIN_EMAIL: process.env.ADMIN_EMAIL?.trim().toLowerCase(),
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+    LOG_DIR: logDirectory,
+    LOG_MAX_SIZE: logMaxSize,
+    LOG_MAX_FILES: logMaxFiles,
     PORT: Number(process.env.PORT),
     NODE_ENV: process.env.NODE_ENV.trim(),
     MONGODB_URI: process.env.MONGODB_URI.trim(),

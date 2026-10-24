@@ -1,12 +1,11 @@
+import { deliveryModel } from "../models/delivery.model.js";
+import { userModel } from "../models/user.model.js";
+import { orderModel } from "../models/order.model.js";
 import mongoose from "mongoose";
 import { config } from "./env.config.js";
-
+import { logger } from "./logger.js";
 export async function connectDB() {
-    try {
-        await mongoose.connect(config.MONGODB_URI);
-        console.log(`[Database] Connected successfully to MongoDB (${config.NODE_ENV})`);
-    } catch (error) {
-        console.error("[Database] MongoDB connection error:", error.message);
-        throw error;
-    }
+    await mongoose.connect(config.MONGODB_URI, { serverSelectionTimeoutMS: 10000 });
+    await Promise.all([userModel.init(), orderModel.init(), deliveryModel.init()]);
+    logger.info("Conexión a MongoDB establecida", { event: "database_connected", environment: config.NODE_ENV });
 }

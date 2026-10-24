@@ -7,6 +7,7 @@ import { AppError } from "../utils/errors.js";
 import { assertValidId } from "../utils/validation.js";
 import { strictBody, text, pagination, invalid } from "../utils/logistics.validation.js";
 import { USER_ROLES as R, ORDER_STATUS as O, ORDER_PRIORITY as P, PRODUCT_STATUS, ERROR_DICTIONARY as E } from "../constants/index.js";
+import { logger } from "../config/logger.js";
 export const ordersService = {
     async list(actor, query) {
         const paging = pagination(query);
@@ -57,6 +58,7 @@ export const ordersService = {
         }
         const order = await ordersRepository.create({ user: userId, order_number: `ORD-${randomUUID()}`,
             items, total_amount: cents / 100, priority, status: O.PENDING, shipping_address });
+        logger.info("Pedido creado", { event: "order_created", orderId: String(order._id), actorId: String(actor._id) });
         return order;
     },
     async cancel(id, body, actor) {
@@ -68,6 +70,7 @@ export const ordersService = {
         if (![O.PENDING, O.IN_TRANSIT].includes(order.status) || (actor.role !== R.ADMIN && order.status !== O.PENDING)) throw new AppError(E.DOMAIN_CONFLICT);
         const updated = await ordersRepository.transition(id, order.status, O.CANCELLED);
         if (!updated) throw new AppError(E.DOMAIN_CONFLICT);
+        logger.info("Pedido cancelado", { event: "order_cancelled", orderId: id, actorId: String(actor._id) });
         return updated;
     },
 };

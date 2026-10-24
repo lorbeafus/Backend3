@@ -1,5 +1,7 @@
 import ordersRouter from "./routes/orders.routes.js";
 import deliveriesRouter from "./routes/deliveries.routes.js";
+import loggerRouter from "./routes/logger.routes.js";
+import { requestLogger } from "./middlewares/requestLogger.middleware.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import passport from "passport";
@@ -14,6 +16,7 @@ import mocksRouter from "./routes/mocks.routes.js";
 const app = express();
 
 // Middlewares globales
+app.use(requestLogger);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -34,6 +37,7 @@ app.use("/api/sessions", sessionsRouter);
 app.use("/api/mocks", mocksRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/deliveries", deliveriesRouter);
+app.use("/api", loggerRouter);
 
 // Middleware para rutas inexistentes (404)
 app.use(notFoundHandler);

@@ -7,6 +7,7 @@ import { assertValidId } from "../utils/validation.js";
 import { strictBody, pagination, invalid, deliveryView } from "../utils/logistics.validation.js";
 import { AppError } from "../utils/errors.js";
 import { USER_ROLES as R, ORDER_STATUS as O, DELIVERY_STATUS as D, ERROR_DICTIONARY as E } from "../constants/index.js";
+import { logger } from "../config/logger.js";
 export const deliveriesService = {
     async list(actor, query) {
         const paging = pagination(query);
@@ -39,6 +40,7 @@ export const deliveriesService = {
         if (body.delivery_notes !== undefined && (typeof body.delivery_notes !== "string" || body.delivery_notes.length > 1000)) throw invalid("Notas de entrega inválidas");
         const saved = await deliveriesRepository.create({ assignment_key: String(order._id), order: body.order, driver: body.driver,
             tracking_code: `TRK-${randomUUID()}`, status: D.ASSIGNED, estimated_delivery_date: date, delivery_notes: body.delivery_notes?.trim() || "" });
+        logger.info("Entrega asignada", { event: "delivery_created", deliveryId: String(saved._id), orderId: body.order });
         return this.get(String(saved._id), actor);
     },
     async transition(id, body, actor) {
@@ -52,6 +54,7 @@ export const deliveriesService = {
         if (!target || !delivery.driver) throw new AppError(E.DOMAIN_CONFLICT, "Transición de entrega no permitida");
         const updated = await ordersRepository.transition(String(delivery.order._id), delivery.order.status, target);
         if (!updated) throw new AppError(E.DOMAIN_CONFLICT, "El pedido cambió; consultá su estado nuevamente");
+        logger.info("Estado de entrega actualizado", { event: "delivery_status_changed", deliveryId: id, status: body.status, actorId: String(actor._id) });
         return this.get(id, actor);
     },
 };

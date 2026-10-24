@@ -1,3 +1,4 @@
+import { logger } from "../config/logger.js";
 import { mocksRepository } from "../repositories/mocks.repository.js";
 import { USER_ROLES, ERROR_DICTIONARY } from "../constants/index.js";
 import { createHash } from "../utils/hash.js";
@@ -30,6 +31,7 @@ export class MocksService {
      */
     getMockUsers(rawQty) {
         const qty = parsePositiveIntegerQty(rawQty, 10, 100);
+        logger.debug("Generación de mocks solicitada", { event: "mock_generated", entity: "users", count: qty });
         const users = [];
         for (let i = 0; i < qty; i++) {
             users.push(generateMockUser({ role: USER_ROLES.USER }));
@@ -43,6 +45,7 @@ export class MocksService {
      */
     getMockDrivers(rawQty) {
         const qty = parsePositiveIntegerQty(rawQty, 10, 100);
+        logger.debug("Generación de mocks solicitada", { event: "mock_generated", entity: "drivers", count: qty });
         const drivers = [];
         for (let i = 0; i < qty; i++) {
             drivers.push(generateMockDriver());
@@ -57,6 +60,7 @@ export class MocksService {
      */
     getMockOrders(rawQty) {
         const qty = parsePositiveIntegerQty(rawQty, 10, 100);
+        logger.debug("Generación de mocks solicitada", { event: "mock_generated", entity: "orders", count: qty });
         const users = [];
         const orders = [];
 
@@ -80,6 +84,7 @@ export class MocksService {
      */
     getMockDeliveries(rawQty) {
         const qty = parsePositiveIntegerQty(rawQty, 10, 100);
+        logger.debug("Generación de mocks solicitada", { event: "mock_generated", entity: "deliveries", count: qty });
         const users = [];
         const drivers = [];
         const orders = [];
@@ -156,6 +161,7 @@ export class MocksService {
                 deliveries: deliveriesToInsert,
             });
 
+            logger.info("Carga de mocks completada", { event: "mock_seed_completed", insertedCounts: inserted });
             return {
                 inserted,
                 scale_qty: qty,

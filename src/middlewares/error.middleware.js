@@ -1,3 +1,4 @@
+import { logger } from "../config/logger.js";
 import { ERROR_DICTIONARY } from "../constants/index.js";
 import { AppError } from "../utils/errors.js";
 
@@ -147,12 +148,7 @@ export const errorHandler = (err, req, res, next) => {
     // 8. Manejo de errores internos / inesperados (500)
     if (statusCode >= 500) {
         // Registro de diagnóstico interno con stack y causa original sin exponer al cliente
-        console.error("❌ [ShipNow Internal Error]:", {
-            code,
-            message: err.message,
-            stack: err.stack,
-            cause: err.cause,
-        });
+
 
         statusCode = 500;
         code = ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.code;
@@ -162,6 +158,11 @@ export const errorHandler = (err, req, res, next) => {
             ? { phase: err.phase, insertedCounts: err.insertedCounts }
             : {};
     }
+
+    logger.log(statusCode >= 500 ? "error" : "warning", statusCode >= 500 ? "Error inesperado de la API" : "Petición rechazada", {
+        event: "api_error", requestId: req.requestId, statusCode, errorCode: code,
+        errorType: err.name, phase: err.phase, insertedCounts: err.insertedCounts,
+    });
 
     const sanitizedDetails = sanitizePublicDetails(rawDetails);
 
