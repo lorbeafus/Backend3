@@ -1,8 +1,9 @@
 # ShipNow API — Backend III
 
 API de logística construida progresivamente: arquitectura por capas (módulo 1),
-mocks (2), errores centralizados (3), logging con Winston (4). Incluye usuarios,
-autenticación, productos, pedidos y entregas integrados mediante rutas reales.
+mocks (2), errores centralizados (3), logging con Winston (4), documentación interactiva
+con Swagger UI y OpenAPI 3.0 (5). Incluye usuarios, autenticación por cookies JWT, productos,
+pedidos y entregas integrados mediante rutas reales.
 
 ## Requisitos y ejecución
 
@@ -54,7 +55,8 @@ src/
   app.js, server.js
   config/         # entorno validado, conexión, Passport, logger Winston
   constants/      # roles, estados, prioridades y diccionario de errores
-  routes/         # users, sessions, products, mocks, orders, deliveries, logger
+  docs/           # especificación OpenAPI 3.0 modular y componentes reutilizables
+  routes/         # users, sessions, products, mocks, orders, deliveries, logger, docs
   controllers/    # coordinación HTTP; errores mediante next(error)
   services/       # reglas, propiedad, validación y transiciones
   repositories/   # consultas, persistencia y cambios condicionales atómicos
@@ -63,7 +65,10 @@ src/
   dto/            # respuestas seguras de usuario
   utils/          # validaciones, hashes, JWT y generadores
 scripts/seed-admin.js
-tests/module4.test.js
+tests/
+  module4.test.js
+  logistics.test.js
+  docs.test.js
 postman_collection.json
 ```
 
@@ -74,9 +79,50 @@ Products se conserva por compatibilidad con la primera consigna, y sirve de cat�
 para construir pedidos. No se implementa Multer todavía: las entregas tienen identidad
 propia para asociar comprobantes en su módulo correspondiente.
 
+## Documentación interactiva Swagger UI y OpenAPI (módulo 5)
+
+La API cuenta con documentación OpenAPI 3.0.3 interactiva e integrable:
+
+- **Interfaz gráfica Swagger UI:** `GET /api/docs`
+- **Documento OpenAPI en JSON crudo:** `GET /api/docs/openapi.json`
+
+El servidor utiliza una URL relativa (`/`) para evitar puertos hardcodeados y permitir
+pruebas fluidas independientemente de la configuración de red o entorno local.
+
+### Módulos documentados y tags
+
+1. **`Health`:** Comprobación rápida de estado y disponibilidad (`GET /api/health`).
+2. **`Sessions`:** Autenticación por cookie `currentUser`, registro (`POST /api/sessions/register`), sesión activa (`GET /api/sessions/current`) y logout (`POST /api/sessions/logout`).
+3. **`Users`:** Administración y consulta de usuarios sanitizados (exclusivo ADMIN).
+4. **`Products`:** Catálogo de productos con filtros de búsqueda y derivación de estado `available` / `out_of_stock` según stock.
+5. **`Orders`:** Creación estricta de pedidos logísticos, cálculo de totales en centavos por el servidor, consulta paginada con aislamiento por rol y cancelación segura.
+6. **`Deliveries`:** Asignación única por pedido a un DRIVER, fechas estimadas UTC obligatorias y transiciones de estado sincronizadas con el pedido.
+7. **`Mocks`:** Generación de datos en memoria (GET públicos) y seed persistente en MongoDB (POST protegido para ADMIN, bloqueado en producción).
+8. **`Logger`:** Endpoint de diagnóstico de niveles de logging Winston (`GET /api/loggerTest`).
+
+### Esquemas reutilizables y separación de contratos
+
+En `components.schemas` se modelan de forma independiente los cuerpos de entrada y las representaciones de salida:
+- **Entrada estricta:** `OrderCreateInput` solo acepta `items` (con `product` y `quantity`), `shipping_address`, `priority` y opcionalmente `user` (solo para ADMIN). El cliente **no** debe enviar `price`, `product_name` ni `total_amount` (su presencia genera rechazo 400 por campos no permitidos).
+- **Salida sanitizada:** `User` y `CurrentUser` nunca exponen contraseñas ni hashes de bcrypt.
+- **Formato uniforme de error:** Toda respuesta de error respeta el contrato `{ status: "error", statusCode, message, error: { code, message, details } }`, incorporando `phase` e `insertedCounts` en caso de fallos parciales de seed.
+
+### Flujo de prueba de rutas protegidas desde Swagger UI
+
+La API utiliza un token JWT almacenado en una **cookie `currentUser` marcada como `HttpOnly`**. Debido a las restricciones de seguridad estándar de los navegadores web, el botón modal «Authorize» de Swagger UI no puede ni debe manipular cookies `HttpOnly` mediante JavaScript.
+
+Para probar rutas protegidas directamente en Swagger UI:
+1. Asegurate de haber creado un usuario administrador ejecutando `npm run seed:admin` en tu terminal local.
+2. Abrí tu navegador en `http://localhost:3000/api/docs` (o el puerto configurado en tu `.env`).
+3. En el grupo **Sessions**, desplegá `POST /api/sessions/login` y hacé clic en **Try it out**.
+4. Ingresá el `email` y `password` del administrador creado y presioná **Execute**.
+5. Al recibir la respuesta `200 OK`, el navegador web almacena automáticamente la cookie `currentUser` para el mismo origen.
+6. A partir de ese momento, cualquier ejecución posterior con **Try it out** en endpoints protegidos (por ejemplo `GET /api/sessions/current`, `GET /api/orders`, `POST /api/deliveries` o `GET /api/loggerTest`) enviará la cookie automáticamente en la cabecera HTTP sin requerir ninguna acción adicional.
+7. Para limpiar la sesión y probar los comportamientos no autenticados (401), ejecutá `POST /api/sessions/logout`.
+
 ## Autenticación y endpoints
 
-Login: `POST /api/sessions/login`, JSON con `email` y `password`. Postman conserva
+Login: `POST /api/sessions/login`, JSON con `email` y `password`. Postman y Swagger conservan
 la cookie `currentUser` (httpOnly, sameSite=lax, secure en producción).
 `GET /api/sessions/current` verifica sesión. Logout público limpia la cookie;
 no revoca un JWT copiado antes de su expiración.
@@ -158,7 +204,7 @@ No borrar pedidos: se conserva historial. No se modifican datos históricos auto
 
 ### Flujo completo para evaluar
 
-1. Crear ADMIN con seed:admin y hacer login.
+1. Crear ADMIN con seed:admin y hacer login desde Swagger (`/api/docs`) o Postman.
 2. Crear un producto disponible (o consultar el catálogo existente).
 3. Crear cliente por register y hacer login como cliente.
 4. Crear pedido y guardar su ID; verificar que otro cliente no puede verlo.
@@ -180,9 +226,32 @@ No borrar pedidos: se conserva historial. No se modifican datos históricos auto
 
 Los cuatro GET son públicos y no consultan ni escriben MongoDB. Cantidad por defecto 10;
 GET acepta 1–100 y seed 1–50; negativos, fracciones, tipos inválidos y parámetros repetidos → 400.
+Ejemplo de invocación inválida en Swagger o cliente HTTP:
+
+```http
+GET /api/mocks/users?qty=-1
+```
+
+Respuesta esperada (400 Bad Request):
+
+```json
+{
+  "status": "error",
+  "statusCode": 400,
+  "message": "El parámetro 'qty' debe ser un número entero positivo mayor a 0",
+  "error": {
+    "code": "INVALID_MOCK_QUANTITY",
+    "message": "El parámetro 'qty' debe ser un número entero positivo mayor a 0",
+    "details": { "field": "qty", "min": 1 }
+  }
+}
+```
+
 Seed guarda hashes bcrypt; no devuelve contraseñas ni hashes. Contraseña de mocks:
 `mockPassword123` (solo usuarios ficticios de desarrollo, nunca credencial ADMIN).
 Roles, estados y prioridades se toman de constantes congeladas.
+En `POST /api/mocks/seed`, el parámetro `qty` puede enviarse por query string o en el cuerpo JSON;
+si ambos están presentes, **query string tiene prioridad sobre el cuerpo**.
 
 La persistencia es secuencial por documento: clientes → drivers → pedidos → entregas.
 Si falla, responde error con phase e insertedCounts, incluyendo escrituras confirmadas
@@ -247,8 +316,21 @@ GET /api/loggerTest
 ```
 
 Emite un registro de cada nivel con event=logger_test y simulated=true. Responde 200
-con la lista de niveles. El fatal de prueba **no detiene** la API. Sin sesión → 401,
-USER → 403, production → 403 aun con ADMIN. Revisar consola, application.log y error.log.
+con la lista de niveles:
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "levels": ["fatal", "error", "warning", "info", "http", "debug"],
+    "simulated": true,
+    "message": "Registros de prueba emitidos; fatal simulado no detiene el proceso"
+  }
+}
+```
+
+El fatal de prueba **no detiene ni apaga** la API. Sin sesión → 401, USER → 403,
+production → 403 aun con ADMIN. Revisar consola, application.log y error.log.
 Por ejemplo, un error.log de prueba contiene dos líneas (error/fatal), no info/debug.
 Para forzar rotación en una base de pruebas, usar LOG_MAX_SIZE=1024 y repetir el endpoint.
 No exponer archivos de logs mediante rutas HTTP. `.gitignore` excluye logs/, *.log,
@@ -257,15 +339,20 @@ No exponer archivos de logs mediante rutas HTTP. `.gitignore` excluye logs/, *.l
 ## Pruebas reproducibles
 
 ```sh
-npm run test:module4
-# Solo pedidos, entregas y permisos:
+# Verificación de documentación OpenAPI, Swagger UI y contratos reales:
+npm run test:docs
+
+# Logística completa, permisos y transiciones atómicas:
 npm run test:logistics
+
+# Suite integral de regresión (módulo 4):
+npm run test:module4
 ```
 
-Requiere MongoDB local en 127.0.0.1:27017. La suite crea una base con prefijo
-shipnow_test4_ y logs en el directorio temporal del sistema; configura variables en el
-proceso, sin leer credenciales reales ni modificar .env. Verifica rutas, propiedad,
-asignación concurrente, transiciones, mocks, 500 seguro, niveles, filtrado y rotación real,
-y limpia la base temporal y logs. Usa node:test nativo, sin incorporar Mocha/Swagger/Multer
-de módulos posteriores. Postman conserva los endpoints anteriores y añade Orders,
+Requiere MongoDB local en 127.0.0.1:27017. La suite crea bases con prefijos aislados
+(`shipnow_test4_` y `shipnow_test_docs_`) y logs en el directorio temporal del sistema;
+configura variables en el proceso, sin leer credenciales reales ni modificar .env.
+Verifica rutas, propiedad, asignación concurrente, transiciones, mocks, 500 seguro,
+niveles de log, rotación y esquemas de Swagger, y limpia las bases temporales y logs.
+Usa `node:test` nativo. Postman conserva los endpoints anteriores y añade Orders,
 Deliveries, Logger y validaciones negativas; ajustar baseUrl e IDs antes de ejecutarla.

@@ -12,6 +12,7 @@ import productsRouter from "./routes/products.routes.js";
 import usersRouter from "./routes/users.routes.js";
 import sessionsRouter from "./routes/sessions.routes.js";
 import mocksRouter from "./routes/mocks.routes.js";
+import docsRouter from "./routes/docs.routes.js";
 
 const app = express();
 
@@ -29,6 +30,9 @@ app.use(passport.initialize());
 app.get("/api/health", (req, res) => {
     res.status(200).json({ status: "active", message: "ShipNow API está funcionando correctamente" });
 });
+
+// Documentación interactiva Swagger UI y especificación OpenAPI
+app.use("/api/docs", docsRouter);
 
 // Routers principales de ShipNow
 app.use("/api/products", productsRouter);
