@@ -1,0 +1,9 @@
+{
+  "extension": ["js"],
+  "spec": ["tests/module6/**/*.test.js"],
+  "require": ["./tests/module6/setup.js"],
+  "ui": "bdd",
+  "reporter": "spec",
+  "timeout": 20000,
+  "exit": false
+}

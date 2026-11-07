@@ -48,6 +48,37 @@ Contraseñas: al menos 6 caracteres al registrar; máximo 72 **bytes UTF-8** en 
 y login usando bcrypt. No se aceptan solo espacios ni se recortan contraseñas válidas.
 El registro público siempre asigna USER, aunque se envíe ADMIN o DRIVER.
 
+### Primer arranque paso a paso (PowerShell)
+
+1. Instalá Node.js y MongoDB Community Server, o prepará una conexión a Atlas. MongoDB debe estar funcionando antes de arrancar la API.
+2. Cloná el repositorio e instalá las dependencias con los comandos anteriores (`npm ci`).
+3. En la raíz del proyecto, ejecutá `Copy-Item .env.example .env`. Editá `.env`: `PORT=3000`, `NODE_ENV=development`, `MONGODB_URI=mongodb://127.0.0.1:27017/shipnow_dev`, `JWT_EXPIRES_IN=1h` y un `JWT_SECRET` propio, largo y aleatorio. El secreto de ejemplo debe reemplazarse. Si usás Atlas, poné su URI y habilitá la conexión desde tu equipo.
+4. Para evaluar rutas de administrador, completá también `ADMIN_EMAIL` y `ADMIN_PASSWORD` con valores propios y ejecutá `npm run seed:admin`. Este paso es opcional para arrancar la API y necesario para disponer de un ADMIN nuevo.
+5. Ejecutá `npm start` y dejá esa terminal abierta. Esperá la confirmación de conexión y de inicio del servidor. `npm run dev` es una alternativa; no ejecutes ambos a la vez en el mismo puerto.
+6. Abrí `http://localhost:3000/api/health`: debe responder 200. Después abrí `http://localhost:3000/api/docs/`. Si cambiaste PORT, usá ese puerto en ambas direcciones.
+7. Seguí el flujo de login y las pruebas de Swagger indicadas abajo. Detené el servidor con Ctrl+C al terminar.
+
+Si MongoDB local está instalado como servicio de Windows, podés comprobar su estado con `Get-Service MongoDB` e iniciarlo con `Start-Service MongoDB` desde PowerShell con permisos de administrador. Si no existe ese servicio, iniciá tu instalación de MongoDB por su mecanismo habitual. MongoDB Compass es un cliente: abrirlo no inicia por sí solo el servidor.
+
+Para probar la documentación, mantené MongoDB local disponible en `127.0.0.1:27017` y ejecutá `npm run test:docs` desde otra terminal en la raíz del proyecto. Esta prueba inicia su propio servidor temporal: no necesita `npm start` ni las credenciales del ADMIN personal. Una conexión Atlas en `.env` no reemplaza el MongoDB local requerido por esta suite.
+
+### Comprobación manual desde Swagger
+
+Con la UI abierta y el login ADMIN realizado mediante Try it out → Execute, ejecutá un endpoint de cada tag y verificá el código y cuerpo mostrados en Server response:
+
+| Tag | Operación | Resultado esperado |
+| --- | --- | --- |
+| Health | GET /api/health | 200 |
+| Sessions | GET /api/sessions/current | 200, usuario autenticado sin contraseña |
+| Users | GET /api/users | 200, usuarios sanitizados |
+| Products | GET /api/products | 200, listado (puede estar vacío) |
+| Orders | GET /api/orders | 200, listado paginado |
+| Deliveries | GET /api/deliveries | 200, listado paginado |
+| Mocks | GET /api/mocks/users con qty=1 | 200, un usuario ficticio en memoria |
+| Logger | GET /api/loggerTest | 200 en development/test; emite logs simulados |
+
+Comprobá además GET /api/mocks/users con qty=-1: debe devolver 400 con INVALID_MOCK_QUANTITY. El test automatizado comprueba respuestas HTTP y contratos seleccionados, pero no reemplaza la inspección visual ni los clics en el navegador. La prueba de Logger escribe archivos locales; los GET de mocks no persisten datos.
+
 ## Arquitectura
 
 ```text
@@ -67,6 +98,16 @@ src/
 scripts/seed-admin.js
 tests/
   module4.test.js
+  logistics.test.js
+  docs.test.js
+  module6/
+    setup.js
+    fixtures.js
+    auth_users.test.js
+    orders.test.js
+    deliveries.test.js
+    mocks.test.js
+    system_errors.test.js
   logistics.test.js
   docs.test.js
 postman_collection.json
@@ -338,6 +379,39 @@ No exponer archivos de logs mediante rutas HTTP. `.gitignore` excluye logs/, *.l
 
 ## Pruebas reproducibles
 
+### Suite funcional con Mocha, Chai y Supertest (Módulo 6)
+
+El proyecto incorpora una suite de pruebas funcionales end-to-end organizada bajo `tests/module6/` que prueba endpoints reales de Express contra MongoDB sin requerir `server.js` ni `npm start`.
+
+- **Mocha (12.x):** Framework de testing BDD que organiza suites y casos (`describe`, `it`, `beforeEach`), gestiona el ciclo de vida asíncrono y los hooks globales (`beforeAll`, `afterAll` en `setup.js`). Se ejecuta sin `--exit` para validar que todos los recursos, sockets y conexiones se cierran limpiamente.
+- **Chai (6.x):** Librería de aserciones (`expect`) en formato ESM para comprobar códigos HTTP, contratos de payload, tipos, valores derivados, validaciones de dominio y ausencia estricta de contraseñas/hashes.
+- **Supertest (7.x):** Cliente HTTP que interactúa directamente con la aplicación Express sobre servidores efímeros. Utiliza `request.agent(app)` para gestionar la cookie HttpOnly `currentUser` recibida en `POST /api/sessions/login` y reenviarla automáticamente en endpoints protegidos, emulando fielmente el flujo de un navegador.
+
+```sh
+# Ejecutar suite funcional completa del Módulo 6 (83 pruebas (82 funcionales HTTP y 1 de integración del servicio)):
+npm run test:module6
+
+# Comando estándar de testing (alias documentado de test:module6):
+npm test
+```
+
+#### Aislamiento, base temporal y limpieza:
+1. **Sin variables del .env personal:** `tests/module6/setup.js` se precarga mediante `--require` en `.mocharc.json`, configurando `NODE_ENV=test`, `PORT=3099`, `MONGODB_URI=mongodb://127.0.0.1:27017/shipnow_test6_<uuid>`, `JWT_SECRET`, `JWT_EXPIRES_IN=1h` y un directorio de logs temporal aislado (`mkdtemp`) antes de que cualquier módulo del sistema lea la configuración.
+2. **Requisitos de MongoDB:** Requiere MongoDB local escuchando en `127.0.0.1:27017`. Si el servicio no está activo, la suite se detiene informando explícitamente el requerimiento sin enmascarar el error.
+3. **Seguridad y robustez de limpieza destructiva:** Antes de ejecutar `dropDatabase()`, el hook `afterAll` verifica que la conexión activa apunte exactamente a la base creada para esa ejecución (`mongoose.connection.name === dbName`) y que comience con el prefijo seguro `shipnow_test6_`. Ante cualquier discrepancia, no realiza el borrado y reporta el problema de seguridad. El teardown ejecuta cada etapa de limpieza de forma independiente (borrado de base, desconexión de Mongoose, cierre de transports de Winston y eliminación del directorio temporal de logs), acumulando y reportando cualquier falla mediante `AggregateError` sin silenciar excepciones y sin recurrir a `--exit` ni `process.exit()`.
+4. **Independencia entre casos:** `seedBaseFixtures()` en `fixtures.js` inicializa en cada grupo usuarios controlados con hash bcrypt (ADMIN, CLIENT1, CLIENT2, DRIVER1, DRIVER2) y productos disponibles/agotados, reseteando las colecciones para que ninguna prueba dependa del estado de pruebas previas.
+
+#### Módulos y escenarios cubiertos:
+- **`auth_users.test.js` (21 pruebas):** Registro con sanitización DTO, forzado de rol USER en registro público, rechazo de emails duplicados (409), validaciones de contraseña mínima y límite de 72 bytes UTF-8 de bcrypt; Login exitoso con emisión de cookie HttpOnly `currentUser`, login fallido con contraseña incorrecta o email inexistente (401), consulta de sesión `/api/sessions/current` y cierre de sesión con `/api/sessions/logout` (el cual elimina la cookie `currentUser` en el cliente; un JWT previamente copiado permanece válido hasta su expiración natural ya que no existe un mecanismo o lista de revocación centralizada); listado `/api/users` como ADMIN (200 sanitizado), rechazo a clientes (403) y anónimos (401), consulta individual por ID distinguiendo 400 (`INVALID_ID`) de 404 (`USER_NOT_FOUND`).
+- **`orders.test.js` (22 pruebas):** Creación válida de pedidos calculando precios y totales desde el catálogo (`total_amount`), estado inicial `pending`; rechazo de campos no permitidos (`strictBody`); validación de pedidos incompletos (rechazo con 400 y formato uniforme ante omisión de `items`, `items` vacío y omisión de `shipping_address`, garantizando que ningún pedido se persista en la base); validación de cantidades (enteros entre 1 y 1000, rechazo de 0, negativos y decimales); rechazo de productos inexistentes (404) y sin stock (409); permisos de creación (DRIVER rechazado con 403, cliente forzando usuario ajeno con 403); listado paginado privado para clientes y completo con usuario poblado para ADMIN; consulta por ID distinguiendo 400 (`INVALID_ID`), 403 (pedido ajeno) y 404 (`ORDER_NOT_FOUND`); cancelación permitida solo al dueño en estado `pending`, rechazo a estados inválidos y usuarios no autorizados.
+- **`deliveries.test.js` (17 pruebas):** Asignación de pedido `pending` a DRIVER por ADMIN con fecha estimada futura y tracking code; rechazo de asignación por roles no permitidos (403), conflicto por asignación duplicada (409) y usuario no driver (400); consulta y listado filtrado por rol (ADMIN ve todo, DRIVER solo sus asignadas, CLIENTE solo las de sus pedidos); transiciones de estado ordenadas `assigned` → `in_progress` → `completed` con verificación del pedido derivado (`in_transit`, `delivered`), y rechazo de saltos inválidos (409).
+- **`mocks.test.js` (15 pruebas):** Generadores en memoria `/api/mocks/users`, `/drivers`, `/orders` y `/deliveries` verificando que no persisten documentos en MongoDB; validación de rangos y parámetros de `qty` en endpoints GET (rechazo de <=0, decimales, texto, >100 y repetidos); `POST /api/mocks/seed` exclusivo para ADMIN con persistencia en base temporal de colecciones relacionadas, soporte de query y body dando prioridad a query, y rechazo a usuarios sin permisos (403) o sin sesión (401); validación exhaustiva de cantidades inválidas en seed persistente (0, negativa, decimal, no numérica y 51 por límite de 50, cubriendo query y body, y verificando HTTP 400, formato uniforme y que no se modifiquen documentos en MongoDB).
+- **`system_errors.test.js` (8 pruebas):** Diagnóstico `/api/loggerTest` en entorno test como ADMIN emitiendo todos los niveles; servicio de documentación Swagger UI `/api/docs/` (HTML) y especificación OpenAPI `/api/docs/openapi.json` (JSON 3.0.3); captura de rutas inexistentes (404) y métodos no coincidentes; contrato estándar de respuestas de error `{ status: "error", statusCode, message, error: { code, message, details } }` validando códigos concretos del diccionario y whitelist de claves públicas.
+
+---
+
+### Suites anteriores (node:test)
+
 ```sh
 # Verificación de documentación OpenAPI, Swagger UI y contratos reales:
 npm run test:docs
@@ -354,5 +428,7 @@ Requiere MongoDB local en 127.0.0.1:27017. La suite crea bases con prefijos aisl
 configura variables en el proceso, sin leer credenciales reales ni modificar .env.
 Verifica rutas, propiedad, asignación concurrente, transiciones, mocks, 500 seguro,
 niveles de log, rotación y esquemas de Swagger, y limpia las bases temporales y logs.
-Usa `node:test` nativo. Postman conserva los endpoints anteriores y añade Orders,
-Deliveries, Logger y validaciones negativas; ajustar baseUrl e IDs antes de ejecutarla.
+Usa `node:test` nativo. Mocha está configurado mediante `.mocharc.json` con patrón `tests/module6/**/*.test.js`, evitando colisiones con los archivos de `node:test`.
+
+
+La suite incluye además una prueba de integración directa de UsersService: rechaza el rol inexistente `superheroe` con AppError 400 e INVALID_INPUT_DATA, informa los roles permitidos y verifica que no persista al usuario. No es una prueba HTTP: el registro público ignora el rol recibido y asigna USER, y no existe una ruta de actualización de roles.
