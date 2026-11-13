@@ -388,7 +388,7 @@ El proyecto incorpora una suite de pruebas funcionales end-to-end organizada baj
 - **Supertest (7.x):** Cliente HTTP que interactúa directamente con la aplicación Express sobre servidores efímeros. Utiliza `request.agent(app)` para gestionar la cookie HttpOnly `currentUser` recibida en `POST /api/sessions/login` y reenviarla automáticamente en endpoints protegidos, emulando fielmente el flujo de un navegador.
 
 ```sh
-# Ejecutar suite funcional completa del Módulo 6 (83 pruebas (82 funcionales HTTP y 1 de integración del servicio)):
+# Ejecutar suite funcional completa del Módulo 6 (112 pruebas (111 funcionales HTTP y 1 de integración del servicio)):
 npm run test:module6
 
 # Comando estándar de testing (alias documentado de test:module6):
@@ -432,3 +432,34 @@ Usa `node:test` nativo. Mocha está configurado mediante `.mocharc.json` con pat
 
 
 La suite incluye además una prueba de integración directa de UsersService: rechaza el rol inexistente `superheroe` con AppError 400 e INVALID_INPUT_DATA, informa los roles permitidos y verifica que no persista al usuario. No es una prueba HTTP: el registro público ignora el rol recibido y asigna USER, y no existe una ruta de actualización de roles.
+### Instalación limpia y repetibilidad del módulo 6
+
+Desde una copia recién clonada, con Node.js compatible y MongoDB local activo:
+
+```sh
+npm ci --include=dev
+npm ls mocha chai supertest
+npm test
+npm run test:module6
+npm test
+npm run test:module6
+```
+
+No hay que instalar Mocha globalmente ni ejecutar npm start. Los scripts encuentran el binario local. Mocha, Chai y Supertest están declarados como devDependencies y también incluidos en package-lock.json. `npm ci --include=dev` instala explícitamente las herramientas aunque el entorno esté configurado para omitir dependencias de desarrollo. Una instalación con `--omit=dev` está destinada a producción y no permite ejecutar esta suite. Si aparece “mocha no se reconoce” o “mocha: not found”, revisá la instalación y usá el comando indicado; no reemplaces la suite ni omitas pruebas.
+
+Cada ejecución crea y elimina su propia base temporal; no realizar limpieza manual entre comandos. `npm test` y `npm run test:module6` ejecutan la misma suite completa del módulo 6; las suites anteriores conservan sus comandos independientes.
+
+`state_edges.test.js` agrega 29 casos HTTP: las nueve transiciones prohibidas entre estados válidos de entrega, repetición de los cuatro estados sin escrituras, avance a failed, estados ausentes, nulos, numéricos o desconocidos, cancelaciones prohibidas según rol y estado, y cancelación ADMIN en tránsito con repetición idempotente. Los rechazos verifican el contrato de error y que el pedido no cambie. En las transiciones prohibidas de entrega también se comprueba que su snapshot persistido permanezca intacto.
+### Dependencias corregidas y mantenimiento
+
+La revisión del 13 de noviembre de 2026 actualizó el lockfile a Mongoose 9.12.1 y body-parser 2.4.0 (dependencia de Express). Se mantiene Mocha 12.0.3, con overrides acotados a sus dependencias glob 14.0.6 y minimatch 11.0.8, que corrigen los avisos de seguridad detectados. Estos overrides cambian la versión mayor de las dependencias internas de Mocha y se validaron con Node.js 24.16.0 y la suite completa; deben revisarse cuando Mocha incorpore las correcciones directamente. No se usó npm audit fix --force.
+
+Para reproducir la instalación y consultar el estado de seguridad actual:
+
+```sh
+npm ci --include=dev
+npm audit
+npm audit --omit=dev
+```
+
+La auditoría informa vulnerabilidades conocidas en el momento de ejecución; un resultado limpio no garantiza ausencia de otros defectos ni evita futuras actualizaciones. El lockfile conserva las dependencias de desarrollo necesarias para ejecutar las pruebas.
