@@ -333,4 +333,70 @@ export const deliveriesPaths = {
             },
         },
     },
+
+    "/api/deliveries/{id}/proof": {
+        post: {
+            tags: ["Deliveries"],
+            summary: "Subir comprobante de entrega",
+            description:
+                "Permite la carga de un archivo comprobante de entrega en formato multipart/form-data.\n" +
+                "- **Permisos:** Exclusivo para ADMIN o el DRIVER asignado a la entrega.\n" +
+                "- **Campos multipart:** Archivo obligatorio `proof` (exactamente 1 archivo binario). No se admiten campos de texto adicionales.\n" +
+                "- **Tipo asignado por el servidor:** `delivery_proof` (fijado automáticamente por el servidor).\n" +
+                "- **Regla de negocio:** La carga del comprobante NO altera automáticamente el estado de la entrega ni del pedido.\n" +
+                "- **Formatos aceptados:** PDF, JPEG, PNG (validación MIME y comprobación de firma mediante magic bytes iniciales; no constituye análisis semántico exhaustivo ni escaneo de malware).\n" +
+                "- **Normalización de extensiones:** Nombre de archivo generado con UUIDv4 y extensión derivada estrictamente del MIME verificado (`application/pdf` → `.pdf`, `image/jpeg` → `.jpg`, `image/png` → `.png`). El nombre original solo se conserva en metadatos.\n" +
+                "- **Límites:** 1 archivo por petición, tamaño máximo 5 MiB.\n" +
+                "- **Almacenamiento y persistencia:** Almacenamiento privado bajo subcarpeta `proofs` y metadatos agregados en MongoDB. Ante fallos inciertos de red, el archivo se preserva para reconciliación.",
+            operationId: "uploadDeliveryProof",
+            security: [{ cookieAuth: [] }],
+            parameters: [
+                {
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    description: "ID de 24 caracteres hexadecimales de la entrega",
+                    schema: {
+                        type: "string",
+                        pattern: "^[0-9a-fA-F]{24}$",
+                        example: "673f1234567890abcdef9999",
+                    },
+                },
+            ],
+            requestBody: {
+                required: true,
+                description: "Formulario multipart con el archivo de comprobante en el campo 'proof'",
+                content: {
+                    "multipart/form-data": {
+                        schema: {
+                            type: "object",
+                            required: ["proof"],
+                            properties: {
+                                proof: {
+                                    type: "string",
+                                    format: "binary",
+                                    description: "Archivo de comprobante (PDF, JPEG o PNG de hasta 5 MiB)",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            responses: {
+                200: {
+                    description: "Comprobante de entrega cargado exitosamente",
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/UploadProofResponse" },
+                        },
+                    },
+                },
+                400: { $ref: "#/components/responses/BadRequestError" },
+                401: { $ref: "#/components/responses/UnauthorizedError" },
+                403: { $ref: "#/components/responses/ForbiddenError" },
+                404: { $ref: "#/components/responses/NotFoundError" },
+                500: { $ref: "#/components/responses/InternalServerError" },
+            },
+        },
+    },
 };

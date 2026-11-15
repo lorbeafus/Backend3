@@ -259,12 +259,12 @@ export const mocksPaths = {
                             example: {
                                 status: "error",
                                 statusCode: 500,
-                                message: "Error en la carga de datos de prueba en la fase 'orders': Error durante la persistencia de datos de prueba",
+                                message: "Error durante la persistencia de datos de prueba",
                                 phase: "orders",
                                 insertedCounts: { users: 5, drivers: 5, orders: 1, deliveries: 0 },
                                 error: {
                                     code: "MOCK_PERSISTENCE_FAILED",
-                                    message: "Error en la carga de datos de prueba en la fase 'orders': Error durante la persistencia de datos de prueba",
+                                    message: "Error durante la persistencia de datos de prueba",
                                     details: { phase: "orders", insertedCounts: { users: 5, drivers: 5, orders: 1, deliveries: 0 } },
                                 },
                             },

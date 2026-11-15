@@ -1110,6 +1110,115 @@ export const schemas = {
         },
         required: ["status", "payload"],
     },
+
+    DocumentMetadata: {
+        type: "object",
+        description: "Metadatos seguros de un documento o comprobante almacenado",
+        required: ["id", "original_name", "filename", "path", "mimetype", "size", "type", "uploaded_at"],
+        properties: {
+            id: {
+                type: "string",
+                example: "673f1234567890abcdef5678",
+                description: "Identificador único de MongoDB del documento",
+            },
+            original_name: {
+                type: "string",
+                example: "comprobante_entrega.pdf",
+                description: "Nombre original del archivo enviado por el cliente",
+            },
+            filename: {
+                type: "string",
+                example: "e2b1c456-7890-4abc-def1-234567890abc.pdf",
+                description: "Nombre único generado por el servidor",
+            },
+            path: {
+                type: "string",
+                example: "documents/e2b1c456-7890-4abc-def1-234567890abc.pdf",
+                description: "Ruta relativa interna en el almacenamiento (nunca ruta absoluta)",
+            },
+            mimetype: {
+                type: "string",
+                example: "application/pdf",
+                enum: ["application/pdf", "image/jpeg", "image/png"],
+                description: "Tipo MIME validado",
+            },
+            size: {
+                type: "integer",
+                example: 1048576,
+                description: "Tamaño del archivo en bytes (máximo 5 MiB)",
+            },
+            type: {
+                type: "string",
+                example: "user_document",
+                enum: ["user_document", "driver_license", "delivery_proof"],
+                description: "Tipo semántico de documento",
+            },
+            uploaded_at: {
+                type: "string",
+                format: "date-time",
+                example: "2026-11-13T14:30:00.000Z",
+                description: "Fecha y hora de carga",
+            },
+        },
+    },
+
+    UploadDocumentResponse: {
+        type: "object",
+        description: "Respuesta exitosa de carga de documento de usuario o licencia",
+        required: ["status", "message", "payload"],
+        properties: {
+            status: {
+                type: "string",
+                example: "success",
+            },
+            message: {
+                type: "string",
+                example: "Documento subido correctamente",
+            },
+            payload: {
+                type: "object",
+                required: ["user_id", "document"],
+                properties: {
+                    user_id: {
+                        type: "string",
+                        example: "673f1234567890abcdef1234",
+                    },
+                    document: {
+                        $ref: "#/components/schemas/DocumentMetadata",
+                    },
+                },
+            },
+        },
+    },
+
+    UploadProofResponse: {
+        type: "object",
+        description: "Respuesta exitosa de carga de comprobante de entrega",
+        required: ["status", "message", "payload"],
+        properties: {
+            status: {
+                type: "string",
+                example: "success",
+            },
+            message: {
+                type: "string",
+                example: "Comprobante de entrega subido correctamente",
+            },
+            payload: {
+                type: "object",
+                required: ["delivery_id", "proof"],
+                properties: {
+                    delivery_id: {
+                        type: "string",
+                        example: "673f1234567890abcdef9999",
+                    },
+                    proof: {
+                        $ref: "#/components/schemas/DocumentMetadata",
+                    },
+                },
+            },
+        },
+    },
 };
 
 export const responses = {

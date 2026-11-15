@@ -43,6 +43,7 @@ Nunca publicar `.env` ni compartir credenciales en README/Postman.
 | `LOG_DIR` | Opcional; por defecto carpeta logs en la raíz del proyecto |
 | `LOG_MAX_SIZE` | Tamaño de rotación en bytes, 5242880 por defecto; 1024–104857600 |
 | `LOG_MAX_FILES` | Archivos por destino incluyendo activo, 5 por defecto; 2–30 |
+| `UPLOAD_DIR` | Opcional; por defecto carpeta uploads en la raíz del proyecto |
 
 Contraseñas: al menos 6 caracteres al registrar; máximo 72 **bytes UTF-8** en registro
 y login usando bcrypt. No se aceptan solo espacios ni se recortan contraseñas válidas.
@@ -93,8 +94,9 @@ src/
   repositories/   # consultas, persistencia y cambios condicionales atómicos
   models/         # User, Product, Order, Delivery
   middlewares/    # autenticación, permisos, request logger, 404, errores
-  dto/            # respuestas seguras de usuario
-  utils/          # validaciones, hashes, JWT y generadores
+  dto/            # respuestas seguras de usuario y documentos
+  utils/          # validaciones, hashes, JWT, generadores y storage centralizado
+uploads/          # almacenamiento privado organizado (documents, licenses, proofs, temp)
 scripts/seed-admin.js
 tests/
   module4.test.js
@@ -110,6 +112,10 @@ tests/
     system_errors.test.js
   logistics.test.js
   docs.test.js
+  module7/
+    setup.js
+    fixtures.js
+    uploads.test.js
 postman_collection.json
 ```
 
@@ -117,8 +123,9 @@ Flujo: Router → Controller → Service → Repository → Model. Los services 
 req/res ni importan Mongoose. Repository encapsula proyecciones, paginación y operaciones
 atómicas; Service decide permisos y reglas. Configuración y conexión quedan en módulos propios.
 Products se conserva por compatibilidad con la primera consigna, y sirve de catálogo
-para construir pedidos. No se implementa Multer todavía: las entregas tienen identidad
-propia para asociar comprobantes en su módulo correspondiente.
+para construir pedidos. Módulo 7 incorpora gestión de archivos privados mediante Multer
+y almacenamiento centralizado para documentos de usuario, licencias de repartidores y
+comprobantes de entrega.
 
 ## Documentación interactiva Swagger UI y OpenAPI (módulo 5)
 
@@ -134,10 +141,10 @@ pruebas fluidas independientemente de la configuración de red o entorno local.
 
 1. **`Health`:** Comprobación rápida de estado y disponibilidad (`GET /api/health`).
 2. **`Sessions`:** Autenticación por cookie `currentUser`, registro (`POST /api/sessions/register`), sesión activa (`GET /api/sessions/current`) y logout (`POST /api/sessions/logout`).
-3. **`Users`:** Administración y consulta de usuarios sanitizados (exclusivo ADMIN).
+3. **`Users`:** Administración y consulta de usuarios sanitizados (exclusivo ADMIN) y carga multipart de documentos y licencias (`POST /api/users/{uid}/documents`).
 4. **`Products`:** Catálogo de productos con filtros de búsqueda y derivación de estado `available` / `out_of_stock` según stock.
 5. **`Orders`:** Creación estricta de pedidos logísticos, cálculo de totales en centavos por el servidor, consulta paginada con aislamiento por rol y cancelación segura.
-6. **`Deliveries`:** Asignación única por pedido a un DRIVER, fechas estimadas UTC obligatorias y transiciones de estado sincronizadas con el pedido.
+6. **`Deliveries`:** Asignación única por pedido a un DRIVER, fechas estimadas UTC obligatorias, transiciones de estado sincronizadas con el pedido y carga multipart de comprobantes de entrega (`POST /api/deliveries/{id}/proof`).
 7. **`Mocks`:** Generación de datos en memoria (GET públicos) y seed persistente en MongoDB (POST protegido para ADMIN, bloqueado en producción).
 8. **`Logger`:** Endpoint de diagnóstico de niveles de logging Winston (`GET /api/loggerTest`).
 
@@ -242,6 +249,36 @@ condicional por estado esperado: un conflicto concurrente devuelve 409. Cancelar
 se refleja automáticamente en la entrega. El campo status almacenado en Delivery conserva
 la instantánea de creación para compatibilidad con mocks; no se debe usar como estado actual.
 No borrar pedidos: se conserva historial. No se modifican datos históricos automáticamente.
+
+### Carga de archivos y gestión de documentos (Módulo 7)
+
+El sistema incorpora endpoints con `multipart/form-data` gestionados mediante **Multer** y almacenamiento centralizado privado (`src/utils/storage.js`) para asociar archivos y metadatos a entidades persistidas en MongoDB:
+
+| Método | Ruta | Parámetros / Campos multipart | Acceso y reglas de negocio |
+| --- | --- | --- | --- |
+| POST | `/api/users/:uid/documents` | Campo de archivo obligatorio: `document`<br>Único campo de texto permitido: `type` (`user_document` o `driver_license`) | Usuario dueño (`req.user.id === uid`) o `ADMIN`. Si `type` es `driver_license`, el usuario objetivo debe tener `role: "driver"` (usuarios con rol `user` son rechazados con 400 `INVALID_DOCUMENT_TYPE`). No se admiten campos de texto adicionales ni arrays por campos duplicados (400 `INVALID_INPUT_DATA` / `INVALID_DOCUMENT_TYPE`). El flujo es independiente del orden multipart. |
+| POST | `/api/deliveries/:id/proof` | Campo de archivo obligatorio: `proof`<br>Tipo asignado por servidor: `delivery_proof` | `DRIVER` asignado a la entrega o `ADMIN`. No se permiten campos de texto adicionales (400 `INVALID_INPUT_DATA`). La carga del comprobante NO altera el estado de la entrega ni del pedido asociado. |
+
+#### Organización del almacenamiento y privacidad:
+- **Ubicación centralizada configurable:** `process.env.UPLOAD_DIR` (por defecto `uploads/` en la raíz).
+- **Subdirectorios organizados:** `uploads/temp` (área de staging para análisis previo a la confirmación), `uploads/documents` (documentación general de usuarios), `uploads/licenses` (licencias de choferes) y `uploads/proofs` (comprobantes de entrega).
+- **Almacenamiento estrictamente privado:** Ningún directorio de uploads se expone mediante `express.static`. Se evita la exposición de rutas absolutas del servidor o accesos directos no autenticados desde el navegador.
+- **Nombres seguros de archivo:** Los archivos se renombran en disco con identificadores únicos UUIDv4 y su extensión se deriva estrictamente del tipo MIME verificado, previniendo colisiones y ataques de sobrescritura o path traversal.
+- **Protección de rutas en eliminación (`safeUnlink`):** Comprobación real de pertenencia mediante `path.relative()`, rechazando la raíz del almacenamiento, rutas absolutas ajenas y recorridos que salgan mediante segmentos `..` (sin rechazar nombres legítimos que comiencen con dos puntos). Se verifica la ubicación canónica real (`realpath`) ante enlaces simbólicos o junctions para evitar escapar del directorio autorizado, y se rechazan carpetas hermanas con prefijos idénticos (ej. `uploads-sibling`). El error `ENOENT` se trata como limpieza idempotente sin interrumpir el flujo.
+
+#### Políticas de validación y control de errores:
+- **Formatos admitidos:** PDF (`application/pdf`), JPEG (`image/jpeg`) y PNG (`image/png`).
+- **Validación dual (MIME y Magic Bytes):** Multer filtra por extensión y `mimetype` declarado. Durante la fase de staging en `temp/`, se verifican las firmas binarias iniciales (`%PDF-`, `\xFF\xD8\xFF`, `\x89PNG\r\n\x1a\n`). Discrepancias entre cabecera HTTP y contenido real son rechazadas con 400 `INVALID_FILE_TYPE` y registradas mediante Winston en nivel `warning`. *Alcance y limitaciones:* la validación de magic bytes inspecciona los primeros bytes del archivo para evitar spoofing o extensiones fraudulentas; no realiza parseo sintáctico exhaustivo de la estructura interna del documento o imagen ni escaneo de malware.
+- **Normalización de extensiones según MIME verificado:** El nombre definitivo del archivo almacenado deriva su extensión exclusivamente del mapeo centralizado (`application/pdf` → `.pdf`, `image/jpeg` → `.jpg`, `image/png` → `.png`). El nombre original solo se conserva como metadato (`original_name`). Si un PDF se envía con nombre `archivo.png`, se almacena físicamente como `<uuid>.pdf`. Si el MIME declarado contradice la firma del contenido, la petición se rechaza con 400 `INVALID_FILE_TYPE`.
+- **Límite de tamaño:** Máximo 5 MiB (5.242.880 bytes). Archivos mayores son rechazados con 400 `FILE_TOO_LARGE`.
+- **Carga única y validación estricta:** Se admite exactamente un archivo por petición (`.single()`). El envío de campos adicionales o múltiples archivos responde 400 `UNEXPECTED_FILE_FIELD` o `INVALID_INPUT_DATA`.
+- **Persistencia de metadatos:** Se almacenan en el array `documents` (`User`) o `proofs` (`Delivery`): `original_name`, `filename`, `path` (relativo seguro), `mimetype`, `size`, `type` y `uploaded_at`. Las respuestas HTTP usan DTOs sanitizados, sin contraseñas, hashes ni rutas absolutas.
+- **Múltiples cargas y no sobrescritura:** Peticiones sucesivas agregan nuevos documentos/comprobantes al array de la entidad y generan archivos independientes en disco, preservando el historial sin sobrescribir cargas previas.
+- **Flujo de almacenamiento, persistencia y resultados inciertos:**
+  - *Archivo temporal:* Si la validación de negocio, formato o permisos falla antes de promover el archivo, se elimina el archivo temporal de `temp/`.
+  - *Archivo definitivo sin confirmación:* Si la persistencia en MongoDB falla antes de asociar (por ejemplo si la entidad desaparece concurrentemente y el repositorio devuelve `null`), se elimina el archivo definitivo huérfano y se devuelve el error de dominio apropiado (404 `USER_NOT_FOUND` / `DELIVERY_NOT_FOUND`).
+  - *Asociación confirmada:* Una vez que MongoDB confirma la escritura atómica, fallos posteriores en serialización DTO, logging o envío de respuesta HTTP **no** eliminan el archivo asociado.
+  - *Resultado incierto por pérdida de conexión:* Si la escritura en MongoDB falla por timeout o desconexión de red (`MongoNetworkError`), el servicio verifica si el documento llegó a persistirse; si la comprobación tampoco puede completarse por falla de red, el sistema **no borra a ciegas** el archivo definitivo para evitar dejar metadatos huérfanos sin archivo en disco, registrando el evento `upload_persistence_uncertain` para su posterior reconciliación. *Límite del sistema:* el sistema de archivos local y MongoDB no constituyen una transacción distribuida atómica (2PC).
 
 ### Flujo completo para evaluar
 
@@ -388,7 +425,7 @@ El proyecto incorpora una suite de pruebas funcionales end-to-end organizada baj
 - **Supertest (7.x):** Cliente HTTP que interactúa directamente con la aplicación Express sobre servidores efímeros. Utiliza `request.agent(app)` para gestionar la cookie HttpOnly `currentUser` recibida en `POST /api/sessions/login` y reenviarla automáticamente en endpoints protegidos, emulando fielmente el flujo de un navegador.
 
 ```sh
-# Ejecutar suite funcional completa del Módulo 6 (112 pruebas (111 funcionales HTTP y 1 de integración del servicio)):
+# Ejecutar suite funcional completa del Módulo 6 (117 pruebas (116 funcionales HTTP y 1 de integración del servicio)):
 npm run test:module6
 
 # Comando estándar de testing (alias documentado de test:module6):
@@ -406,7 +443,61 @@ npm test
 - **`orders.test.js` (22 pruebas):** Creación válida de pedidos calculando precios y totales desde el catálogo (`total_amount`), estado inicial `pending`; rechazo de campos no permitidos (`strictBody`); validación de pedidos incompletos (rechazo con 400 y formato uniforme ante omisión de `items`, `items` vacío y omisión de `shipping_address`, garantizando que ningún pedido se persista en la base); validación de cantidades (enteros entre 1 y 1000, rechazo de 0, negativos y decimales); rechazo de productos inexistentes (404) y sin stock (409); permisos de creación (DRIVER rechazado con 403, cliente forzando usuario ajeno con 403); listado paginado privado para clientes y completo con usuario poblado para ADMIN; consulta por ID distinguiendo 400 (`INVALID_ID`), 403 (pedido ajeno) y 404 (`ORDER_NOT_FOUND`); cancelación permitida solo al dueño en estado `pending`, rechazo a estados inválidos y usuarios no autorizados.
 - **`deliveries.test.js` (17 pruebas):** Asignación de pedido `pending` a DRIVER por ADMIN con fecha estimada futura y tracking code; rechazo de asignación por roles no permitidos (403), conflicto por asignación duplicada (409) y usuario no driver (400); consulta y listado filtrado por rol (ADMIN ve todo, DRIVER solo sus asignadas, CLIENTE solo las de sus pedidos); transiciones de estado ordenadas `assigned` → `in_progress` → `completed` con verificación del pedido derivado (`in_transit`, `delivered`), y rechazo de saltos inválidos (409).
 - **`mocks.test.js` (15 pruebas):** Generadores en memoria `/api/mocks/users`, `/drivers`, `/orders` y `/deliveries` verificando que no persisten documentos en MongoDB; validación de rangos y parámetros de `qty` en endpoints GET (rechazo de <=0, decimales, texto, >100 y repetidos); `POST /api/mocks/seed` exclusivo para ADMIN con persistencia en base temporal de colecciones relacionadas, soporte de query y body dando prioridad a query, y rechazo a usuarios sin permisos (403) o sin sesión (401); validación exhaustiva de cantidades inválidas en seed persistente (0, negativa, decimal, no numérica y 51 por límite de 50, cubriendo query y body, y verificando HTTP 400, formato uniforme y que no se modifiquen documentos en MongoDB).
-- **`system_errors.test.js` (8 pruebas):** Diagnóstico `/api/loggerTest` en entorno test como ADMIN emitiendo todos los niveles; servicio de documentación Swagger UI `/api/docs/` (HTML) y especificación OpenAPI `/api/docs/openapi.json` (JSON 3.0.3); captura de rutas inexistentes (404) y métodos no coincidentes; contrato estándar de respuestas de error `{ status: "error", statusCode, message, error: { code, message, details } }` validando códigos concretos del diccionario y whitelist de claves públicas.
+- **`system_errors.test.js` (13 pruebas):** Diagnóstico `/api/loggerTest` en entorno test como ADMIN emitiendo todos los niveles; servicio de documentación Swagger UI `/api/docs/` (HTML) y especificación OpenAPI `/api/docs/openapi.json` (JSON 3.0.3); captura de rutas inexistentes (404) y métodos no coincidentes; contrato estándar de respuestas de error `{ status: "error", statusCode, message, error: { code, message, details } }` validando códigos concretos del diccionario y whitelist de claves públicas; seguridad estricta y aislamiento de errores 500 (conservación de códigos conocidos de servidor como `UPLOAD_ERROR` y `MOCK_PERSISTENCE_FAILED` usando exclusivamente el mensaje público del diccionario, conversión de códigos desconocidos y excepciones a `INTERNAL_SERVER_ERROR`, y blindaje de `details` sin exponer stack, cause, rutas, consultas ni secretos).
+
+---
+
+### Suite funcional de carga de archivos con Multer (Módulo 7)
+
+El proyecto cuenta con una suite completa de pruebas funcionales para los endpoints de carga de archivos multipart y el componente de almacenamiento centralizado bajo `tests/module7/`:
+
+```sh
+# Ejecutar suite funcional del Módulo 7 (59 pruebas funcionales HTTP y validación de storage):
+npm run test:module7
+```
+
+#### Aislamiento, almacenamiento temporal y limpieza:
+1. **Configuración aislada:** `tests/module7/setup.js` se precarga mediante `.mocharc.module7.json`, configurando `NODE_ENV=test`, `PORT=3098`, `MONGODB_URI=mongodb://127.0.0.1:27017/shipnow_test7_<uuid>`, `JWT_SECRET`, directorio temporal de logs y un directorio temporal de uploads dedicado (`os.tmpdir()/shipnow-test7-uploads-<sufijo>`) con subcarpetas `documents/`, `licenses/`, `proofs/` y `temp/`.
+2. **Seguridad y robustez de limpieza destructiva:** El teardown verifica que el nombre de la base de datos comience estrictamente con `shipnow_test7_` antes de invocar `dropDatabase()`, desconecta Mongoose, cierra los transports del logger, elimina el directorio temporal de uploads y el directorio temporal de logs de forma independiente acumulando posibles errores en `AggregateError`. No se utiliza `--exit` ni `process.exit()`.
+3. **Fixtures binarios reales:** `tests/module7/fixtures.js` genera en memoria buffers reales para PDF (con cabecera `%PDF-`), JPEG (`\xFF\xD8\xFF`), PNG (`\x89PNG\r\n\x1a\n`), archivos de texto simulados para pruebas de mismatch de magic bytes y buffers de tamaño superior a 5 MiB para límites.
+
+#### Escenarios cubiertos (59 pruebas):
+- **Documentos de usuario (`POST /api/users/:uid/documents`):**
+  - Carga válida de `user_document` (PDF, JPEG, PNG) por el usuario dueño y por ADMIN.
+  - Carga válida de `driver_license` (PDF) para usuario con rol `driver` por el propio chofer y por ADMIN.
+  - Normalización de extensión: un PDF con nombre original `.png` se guarda con extensión definitiva `.pdf` acorde al MIME verificado, manteniendo el nombre original como metadato.
+  - Independencia del orden multipart: carga exitosa cuando el archivo binario se adjunta antes que el campo `type`.
+  - Validación estricta de campos: rechazo con 400 `INVALID_INPUT_DATA` ante campos de texto adicionales y 400 `INVALID_DOCUMENT_TYPE` ante campo `type` duplicado que genere arrays.
+  - Persistencia de metadatos en MongoDB (`original_name`, `filename`, `path` relativo, `mimetype`, `size`, `type`, `uploaded_at`).
+  - Verificación de existencia del archivo en la subcarpeta correspondiente (`uploads/documents` o `uploads/licenses`) con nombre UUIDv4.
+  - Acumulación de múltiples archivos en cargas sucesivas sin sobrescribir ni borrar los anteriores.
+  - Ausencia de contraseñas, hashes o rutas absolutas en la respuesta DTO.
+  - Rechazos de autorización: usuario no autenticado (401), usuario intentando subir a otro usuario sin ser ADMIN (403).
+  - Rechazos de validación de negocio: usuario con rol `user` intentando subir `driver_license` (400 `INVALID_DOCUMENT_TYPE`), campo `type` ausente o no admitido (400 `INVALID_DOCUMENT_TYPE`), ID de usuario inválido (400 `INVALID_ID`) o inexistente (404 `USER_NOT_FOUND`).
+  - Rechazos de formato y archivo: omisión del archivo (400 `FILE_REQUIRED`), extensión/mimetype no admitido (400 `INVALID_FILE_TYPE`), contenido que no coincide con los magic bytes declarados (400 `INVALID_FILE_TYPE`), archivo mayor a 5 MiB (400 `FILE_TOO_LARGE`), campo inesperado o múltiples archivos (400 `UNEXPECTED_FILE_FIELD`).
+  - Limpieza y persistencia segura: si la entidad desaparece durante la persistencia, se devuelve 404 y se elimina el archivo huérfano. Si la persistencia se confirma pero ocurre un fallo posterior en serialización DTO o respuesta HTTP, el archivo y los metadatos permanecen intactos. Ante resultado incierto por fallo de red, el archivo físico se preserva para reconciliación.
+  - Recuperación de escritura real post-fallo: si MongoDB ejecutó la persistencia pero la conexión se interrumpió antes de confirmar, la verificación recupera el registro exacto persistido (con su `_id` real y metadatos) devolviendo 200 sin duplicar datos ni recurrir al último elemento del array.
+- **Comprobantes de entrega (`POST /api/deliveries/:id/proof`):**
+  - Carga válida de `proof` (PDF, JPEG, PNG) por el `DRIVER` asignado a la entrega y por `ADMIN`.
+  - Tipo asignado automáticamente por el servidor (`delivery_proof`).
+  - Normalización de extensiones: archivo con MIME `application/pdf` y nombre `.jpg` se guarda con extensión `.pdf`.
+  - Validación estricta: rechazo con 400 `INVALID_INPUT_DATA` ante cualquier campo de texto adicional.
+  - Persistencia en el array `proofs` de la entrega y almacenamiento físico en `uploads/proofs/`.
+  - Verificación estricta de que la subida del comprobante **no modifica el estado de la entrega ni el del pedido asociado**.
+  - Rechazos de autorización: anónimo (401), chofer no asignado a la entrega (403), usuario cliente (403).
+  - Rechazos de validación: ID de entrega inválido (400 `INVALID_ID`) o inexistente (404 `DELIVERY_NOT_FOUND`).
+  - Rechazos de archivo: archivo ausente (400 `FILE_REQUIRED`), tamaño excedido (400 `FILE_TOO_LARGE`), discrepancia de magic bytes (400 `INVALID_FILE_TYPE`), nombre de campo erróneo (400 `UNEXPECTED_FILE_FIELD`).
+  - Manejo de persistencia: limpieza de archivo si la entrega no existe (404), preservación de archivo y metadatos tras confirmación ante fallos posteriores, y preservación ante resultados inciertos de red.
+  - Manejo de desincronización y fallos de repositorio (`UPLOAD_ERROR`): si el repositorio devuelve una entidad sin el comprobante y la base no lo contiene, rechazo con 500 `UPLOAD_ERROR` con formato centralizado y eliminación del archivo físico; si MongoDB sí lo asentó, recuperación determinista por verificación de `filename` sin eliminar el archivo; y ante fallo de conexión durante la verificación, preservación segura para reconciliación.
+  - Recuperación de comprobante persistido: devolución del `_id` y metadatos reales ante reconexión tras fallo post-escritura.
+- **Protección de rutas al eliminar archivos (`safeUnlink` e `isPathInside`):**
+  - Eliminación exitosa de archivos legítimos dentro del directorio de uploads.
+  - Detención de la limpieza y preservación del archivo sin invocar `fs.unlink()` si falla `fs.realpath()` del directorio raíz o del destino con un error distinto de `ENOENT`.
+  - Rechazo de eliminación y emisión de alerta de seguridad si el archivo reside en una carpeta hermana con prefijo idéntico (`uploads-sibling`).
+  - Rechazo de eliminación ante intentos de path traversal con segmentos `..`.
+  - Tratamiento idempotente ante archivos inexistentes (`ENOENT`) sin lanzar excepciones.
+  - Aceptación de nombres de archivo legítimos que comiencen con dos puntos (`..nombre.pdf`) dentro del directorio autorizado.
+  - Validación de pertenencia canónica estricta rechazando la raíz misma y rutas absolutas ajenas.
 
 ---
 
@@ -463,3 +554,7 @@ npm audit --omit=dev
 ```
 
 La auditoría informa vulnerabilidades conocidas en el momento de ejecución; un resultado limpio no garantiza ausencia de otros defectos ni evita futuras actualizaciones. El lockfile conserva las dependencias de desarrollo necesarias para ejecutar las pruebas.
+
+### Verificación manual del Módulo 7
+
+Validación realizada en Swagger UI el 15/11/2026 con MongoDB local: login de administrador y consulta de sesión correctos; carga de un PDF de prueba en `POST /api/users/{uid}/documents` (200); seed con `qty=1` (201); consulta de entregas y carga del comprobante en `POST /api/deliveries/{id}/proof` (200). Se comprobó también la respuesta controlada 404 `DELIVERY_NOT_FOUND` al usar un identificador que no correspondía a una entrega. Las credenciales y los archivos subidos permanecen fuera del repositorio.
