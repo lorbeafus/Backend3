@@ -1,3 +1,5 @@
+import { DocumentDTO } from "./document.dto.js";
+
 export class UserDTO {
     constructor(user) {
         if (!user) return;
@@ -6,6 +8,9 @@ export class UserDTO {
         this.last_name = user.last_name;
         this.email = user.email;
         this.role = user.role;
+        if (user.documents && Array.isArray(user.documents)) {
+            this.documents = DocumentDTO.getFrom(user.documents);
+        }
     }
 
     static getFrom(user) {

@@ -34,6 +34,31 @@ export const ERROR_DICTIONARY = Object.freeze({
         statusCode: 400,
         message: "El estado de la entidad o transición de dominio solicitada no es válido",
     }),
+    FILE_REQUIRED: Object.freeze({
+        code: "FILE_REQUIRED",
+        statusCode: 400,
+        message: "Debe adjuntar un archivo para completar la operación",
+    }),
+    INVALID_FILE_TYPE: Object.freeze({
+        code: "INVALID_FILE_TYPE",
+        statusCode: 400,
+        message: "El formato de archivo no es válido. Solo se admiten PDF, JPEG y PNG",
+    }),
+    FILE_TOO_LARGE: Object.freeze({
+        code: "FILE_TOO_LARGE",
+        statusCode: 400,
+        message: "El archivo supera el tamaño máximo permitido de 5 MiB",
+    }),
+    INVALID_DOCUMENT_TYPE: Object.freeze({
+        code: "INVALID_DOCUMENT_TYPE",
+        statusCode: 400,
+        message: "El tipo de documento especificado no es válido",
+    }),
+    UNEXPECTED_FILE_FIELD: Object.freeze({
+        code: "UNEXPECTED_FILE_FIELD",
+        statusCode: 400,
+        message: "Campo de archivo no esperado o cantidad de archivos excedida",
+    }),
 
     // -------------------------------------------------------------
     // 401 Unauthorized - Autenticación y tokens
@@ -113,6 +138,11 @@ export const ERROR_DICTIONARY = Object.freeze({
         code: "MOCK_PERSISTENCE_FAILED",
         statusCode: 500,
         message: "Error durante la persistencia de datos de prueba",
+    }),
+    UPLOAD_ERROR: Object.freeze({
+        code: "UPLOAD_ERROR",
+        statusCode: 500,
+        message: "Error durante el almacenamiento o procesamiento del archivo",
     }),
     INTERNAL_SERVER_ERROR: Object.freeze({
         code: "INTERNAL_SERVER_ERROR",

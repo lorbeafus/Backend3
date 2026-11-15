@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { list, get, create, transition } from "../controllers/deliveries.controller.js";
+import { list, get, create, transition, uploadProof } from "../controllers/deliveries.controller.js";
 import { authMiddleware, authorizeRoles } from "../middlewares/auth.middleware.js";
+import { uploadProofMiddleware } from "../utils/storage.js";
 import { USER_ROLES } from "../constants/index.js";
 const router = Router();
 router.use(authMiddleware);
@@ -8,4 +9,5 @@ router.get("/", list);
 router.get("/:id", get);
 router.post("/", authorizeRoles(USER_ROLES.ADMIN), create);
 router.patch("/:id/status", transition);
+router.post("/:id/proof", uploadProofMiddleware, uploadProof);
 export default router;

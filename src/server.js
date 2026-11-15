@@ -2,6 +2,8 @@
 import { logger, finishLogger } from "./config/logger.js";
 try {
     const { config } = await import("./config/index.js");
+    const { initStorage } = await import("./utils/storage.js");
+    await initStorage();
     const { default: app } = await import("./app.js");
     const { connectDB } = await import("./config/database.js");
     await connectDB();

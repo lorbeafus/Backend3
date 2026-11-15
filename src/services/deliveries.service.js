@@ -8,6 +8,8 @@ import { strictBody, pagination, invalid, deliveryView } from "../utils/logistic
 import { AppError } from "../utils/errors.js";
 import { USER_ROLES as R, ORDER_STATUS as O, DELIVERY_STATUS as D, ERROR_DICTIONARY as E } from "../constants/index.js";
 import { logger } from "../config/logger.js";
+import { storageService } from "../utils/storage.js";
+import { DocumentDTO } from "../dto/index.js";
 export const deliveriesService = {
     async list(actor, query) {
         const paging = pagination(query);
@@ -56,5 +58,174 @@ export const deliveriesService = {
         if (!updated) throw new AppError(E.DOMAIN_CONFLICT, "El pedido cambió; consultá su estado nuevamente");
         logger.info("Estado de entrega actualizado", { event: "delivery_status_changed", deliveryId: id, status: body.status, actorId: String(actor._id) });
         return this.get(id, actor);
+    },
+    async uploadProof({ deliveryId, file, actor }) {
+        assertValidId(deliveryId);
+        const delivery = await deliveriesRepository.getById(deliveryId);
+        if (!delivery) {
+            throw new AppError(E.DELIVERY_NOT_FOUND, "Entrega no encontrada", {
+                details: { field: "id" },
+            });
+        }
+
+        const isAdmin = actor.role === R.ADMIN;
+        const isAssignedDriver =
+            actor.role === R.DRIVER &&
+            delivery.driver &&
+            String(delivery.driver._id || delivery.driver) === String(actor._id);
+
+        if (!isAdmin && !isAssignedDriver) {
+            throw new AppError(
+                E.INSUFFICIENT_PERMISSIONS,
+                "Solo un administrador o el chofer asignado a esta entrega puede subir comprobantes"
+            );
+        }
+
+        // 1. Validar magic bytes del archivo en staging
+        await storageService.verifyMagicBytes(file.path, file.mimetype);
+
+        // 2. Mover de staging a carpeta definitiva 'proofs'
+        const committed = await storageService.commitFile(file, "proofs");
+        let associationConfirmed = false;
+        let persistedProof = null;
+
+        const proofData = {
+            original_name: file.originalname,
+            filename: committed.filename,
+            path: committed.path,
+            mimetype: file.mimetype,
+            size: file.size,
+            type: "delivery_proof",
+            uploaded_at: new Date(),
+        };
+
+        try {
+            const updatedDelivery = await deliveriesRepository.addProof(deliveryId, proofData);
+            if (!updatedDelivery) {
+                await storageService.safeUnlink(committed.absolutePath);
+                throw new AppError(E.DELIVERY_NOT_FOUND, "Entrega no encontrada", {
+                    details: { field: "id" },
+                });
+            }
+            persistedProof = updatedDelivery.proofs?.find((p) => p.filename === committed.filename) || null;
+            if (persistedProof) {
+                associationConfirmed = true;
+            } else {
+                let recoveredProof = null;
+                let checkFailed = false;
+                try {
+                    const verified = await deliveriesRepository.getById(deliveryId);
+                    if (verified && Array.isArray(verified.proofs)) {
+                        recoveredProof = verified.proofs.find((p) => p.filename === committed.filename) || null;
+                    }
+                } catch {
+                    checkFailed = true;
+                }
+
+                if (recoveredProof) {
+                    associationConfirmed = true;
+                    persistedProof = recoveredProof;
+                    logger.warning("Persistencia confirmada tras verificación post-error", {
+                        event: "upload_persistence_verified_after_error",
+                        deliveryId,
+                        filename: committed.filename,
+                    });
+                } else if (checkFailed) {
+                    logger.error(
+                        "Persistencia incierta al asociar comprobante: no se pudo verificar en MongoDB por fallo de conexión. Archivo preservado para reconciliación",
+                        {
+                            event: "upload_persistence_uncertain",
+                            deliveryId,
+                            filename: committed.filename,
+                        }
+                    );
+                    throw new AppError(E.UPLOAD_ERROR, "No se pudo asociar el comprobante a la entrega");
+                } else {
+                    await storageService.safeUnlink(committed.absolutePath);
+                    logger.error("Fallo al persistir comprobante de entrega en MongoDB. Archivo huérfano eliminado", {
+                        event: "upload_persistence_failed",
+                        deliveryId,
+                        filename: committed.filename,
+                    });
+                    throw new AppError(E.UPLOAD_ERROR, "No se pudo asociar el comprobante a la entrega");
+                }
+            }
+        } catch (err) {
+            if (associationConfirmed) {
+                throw err;
+            }
+            if (err instanceof AppError) {
+                throw err;
+            }
+
+            let recoveredProof = null;
+            let checkFailed = false;
+            try {
+                const verified = await deliveriesRepository.getById(deliveryId);
+                if (verified && Array.isArray(verified.proofs)) {
+                    recoveredProof = verified.proofs.find((p) => p.filename === committed.filename) || null;
+                }
+            } catch (queryErr) {
+                checkFailed = true;
+            }
+
+            if (recoveredProof) {
+                associationConfirmed = true;
+                persistedProof = recoveredProof;
+                logger.warning("Persistencia confirmada tras verificación post-error", {
+                    event: "upload_persistence_verified_after_error",
+                    deliveryId,
+                    filename: committed.filename,
+                });
+            } else if (checkFailed) {
+                logger.error(
+                    "Persistencia incierta al asociar comprobante: no se pudo verificar en MongoDB por fallo de conexión. Archivo preservado para reconciliación",
+                    {
+                        event: "upload_persistence_uncertain",
+                        deliveryId,
+                        filename: committed.filename,
+                        error: err.message,
+                    }
+                );
+                throw err;
+            } else {
+                await storageService.safeUnlink(committed.absolutePath);
+                logger.error("Fallo al persistir comprobante de entrega en MongoDB. Archivo huérfano eliminado", {
+                    event: "upload_persistence_failed",
+                    deliveryId,
+                    filename: committed.filename,
+                    error: err.message,
+                });
+                throw err;
+            }
+        }
+
+        // Una vez confirmada la asociación, errores posteriores de DTO, logging o respuesta NO eliminan el archivo
+        try {
+            logger.info("Comprobante de entrega asociado exitosamente", {
+                event: "proof_uploaded",
+                deliveryId,
+                type: "delivery_proof",
+                filename: committed.filename,
+                size: file.size,
+                mimetype: file.mimetype,
+            });
+        } catch {
+            // Ignorar fallo secundario de logging
+        }
+
+        const proofDto = new DocumentDTO(persistedProof);
+        return {
+            delivery_id: String(deliveryId),
+            id: proofDto.id,
+            original_name: proofDto.original_name,
+            filename: proofDto.filename,
+            path: proofDto.path,
+            mimetype: proofDto.mimetype,
+            size: proofDto.size,
+            type: proofDto.type,
+            uploaded_at: proofDto.uploaded_at,
+            proof: proofDto,
+        };
     },
 };

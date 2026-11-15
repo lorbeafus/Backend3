@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 // Cargar variables de entorno desde el archivo .env
 dotenv.config({ quiet: true });
 const logDirectory = process.env.LOG_DIR?.trim() || fileURLToPath(new URL("../../logs", import.meta.url));
+const uploadDirectory = process.env.UPLOAD_DIR?.trim() || fileURLToPath(new URL("../../uploads", import.meta.url));
 const logMaxSize = Number(process.env.LOG_MAX_SIZE || 5242880);
 const logMaxFiles = Number(process.env.LOG_MAX_FILES || 5);
 configureLogger({ nodeEnv: process.env.NODE_ENV, logDir: logDirectory,
@@ -67,6 +68,7 @@ export const config = Object.freeze({
     ADMIN_EMAIL: process.env.ADMIN_EMAIL?.trim().toLowerCase(),
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
     LOG_DIR: logDirectory,
+    UPLOAD_DIR: uploadDirectory,
     LOG_MAX_SIZE: logMaxSize,
     LOG_MAX_FILES: logMaxFiles,
     PORT: Number(process.env.PORT),

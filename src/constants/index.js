@@ -30,6 +30,12 @@ export const DELIVERY_STATUS = Object.freeze({
     FAILED: "failed",
 });
 
+export const DOCUMENT_TYPES = Object.freeze({
+    USER_DOCUMENT: "user_document",
+    DRIVER_LICENSE: "driver_license",
+    DELIVERY_PROOF: "delivery_proof",
+});
+
 export { ERROR_DICTIONARY } from "./errors.constants.js";
 
 // Única tabla compartida por la API real y los generadores de mocks.

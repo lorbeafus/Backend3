@@ -8,6 +8,9 @@ import {
     getGuestAgent,
 } from "./fixtures.js";
 import { ERROR_DICTIONARY } from "../../src/constants/index.js";
+import { AppError, MockSeedError } from "../../src/utils/errors.js";
+import { ordersRepository } from "../../src/repositories/orders.repository.js";
+import { mocksService } from "../../src/services/mocks.service.js";
 
 describe("Módulo 6 - Logger, Swagger y Contratos Centralizados de Error", () => {
     beforeEach(async () => {
@@ -133,6 +136,214 @@ describe("Módulo 6 - Logger, Swagger y Contratos Centralizados de Error", () =>
             const res403 = await client1Agent.get("/api/users").expect(403);
             expect(res403.body).to.have.all.keys("status", "statusCode", "message", "error");
             expect(res403.body.error.code).to.equal(ERROR_DICTIONARY.INSUFFICIENT_PERMISSIONS.code);
+        });
+    });
+
+    describe("Seguridad y aislamiento de errores 500 (sin filtración de datos sensibles)", () => {
+        it("AppError con código UPLOAD_ERROR y mensaje interno con marcador sensible: devuelve UPLOAD_ERROR y mensaje del diccionario sin exponer el marcador", async () => {
+            const adminAgent = await getAdminAgent();
+            const originalGetById = ordersRepository.getById;
+            ordersRepository.getById = async () => {
+                throw new AppError(
+                    ERROR_DICTIONARY.UPLOAD_ERROR,
+                    "Fallo interno en filesystem con marcador FAKE_SENSITIVE_FS_MARKER_987654"
+                );
+            };
+
+            try {
+                const res = await adminAgent
+                    .get("/api/orders/507f1f77bcf86cd799439011")
+                    .expect(500);
+
+                expect(res.body).to.deep.include({
+                    status: "error",
+                    statusCode: 500,
+                    message: ERROR_DICTIONARY.UPLOAD_ERROR.message,
+                });
+                expect(res.body.error).to.deep.include({
+                    code: ERROR_DICTIONARY.UPLOAD_ERROR.code,
+                    message: ERROR_DICTIONARY.UPLOAD_ERROR.message,
+                });
+
+                const serialized = JSON.stringify(res.body);
+                expect(serialized).to.not.include("FAKE_SENSITIVE_FS_MARKER_987654");
+                expect(serialized).to.not.include("Fallo interno en filesystem");
+            } finally {
+                ordersRepository.getById = originalGetById;
+            }
+        });
+
+        it("MockSeedError con mensaje interno sensible ficticio: devuelve MOCK_PERSISTENCE_FAILED y mensaje público conservando phase e insertedCounts", async () => {
+            const adminAgent = await getAdminAgent();
+            const originalSeed = mocksService.seedDatabase;
+            mocksService.seedDatabase = async () => {
+                const fakeErr = new Error("MongoNetworkError to mongodb://fakeuser:FAKE_PASSWORD_MARKER_999@10.0.0.1:27017/secret");
+                throw new MockSeedError(
+                    ERROR_DICTIONARY.MOCK_PERSISTENCE_FAILED,
+                    `Error en la carga de datos de prueba en la fase 'users': ${fakeErr.message}`,
+                    {
+                        statusCode: 500,
+                        phase: "users",
+                        insertedCounts: { users: 0, drivers: 0, orders: 0, deliveries: 0 },
+                        cause: fakeErr,
+                        details: {
+                            phase: "users",
+                            insertedCounts: { users: 0, drivers: 0, orders: 0, deliveries: 0 },
+                            sensitiveConnectionString: "mongodb://fakeuser:FAKE_PASSWORD_MARKER_999@10.0.0.1:27017/secret",
+                        },
+                    }
+                );
+            };
+
+            try {
+                const res = await adminAgent
+                    .post("/api/mocks/seed?qty=1")
+                    .expect(500);
+
+                expect(res.body).to.deep.include({
+                    status: "error",
+                    statusCode: 500,
+                    message: ERROR_DICTIONARY.MOCK_PERSISTENCE_FAILED.message,
+                    phase: "users",
+                });
+                expect(res.body.insertedCounts).to.deep.equal({
+                    users: 0,
+                    drivers: 0,
+                    orders: 0,
+                    deliveries: 0,
+                });
+                expect(res.body.error).to.deep.include({
+                    code: ERROR_DICTIONARY.MOCK_PERSISTENCE_FAILED.code,
+                    message: ERROR_DICTIONARY.MOCK_PERSISTENCE_FAILED.message,
+                });
+                expect(res.body.error.details).to.deep.include({
+                    phase: "users",
+                    insertedCounts: { users: 0, drivers: 0, orders: 0, deliveries: 0 },
+                });
+
+                const serialized = JSON.stringify(res.body);
+                expect(serialized).to.not.include("FAKE_PASSWORD_MARKER_999");
+                expect(serialized).to.not.include("mongodb://");
+                expect(serialized).to.not.include("MongoNetworkError");
+                expect(serialized).to.not.include("sensitiveConnectionString");
+            } finally {
+                mocksService.seedDatabase = originalSeed;
+            }
+        });
+
+        it("excepción inesperada: devuelve INTERNAL_SERVER_ERROR sin detalles internos ni filtración", async () => {
+            const adminAgent = await getAdminAgent();
+            const originalGetById = ordersRepository.getById;
+            ordersRepository.getById = async () => {
+                throw new Error("Crash no controlado con marcador FAKE_CRASH_SECRET_MARKER_123");
+            };
+
+            try {
+                const res = await adminAgent
+                    .get("/api/orders/507f1f77bcf86cd799439011")
+                    .expect(500);
+
+                expect(res.body).to.deep.include({
+                    status: "error",
+                    statusCode: 500,
+                    message: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message,
+                });
+                expect(res.body.error).to.deep.include({
+                    code: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.code,
+                    message: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message,
+                    details: {},
+                });
+
+                const serialized = JSON.stringify(res.body);
+                expect(serialized).to.not.include("FAKE_CRASH_SECRET_MARKER_123");
+                expect(serialized).to.not.include("Crash no controlado");
+            } finally {
+                ordersRepository.getById = originalGetById;
+            }
+        });
+
+        it("AppError con código desconocido y status 500: se convierte en INTERNAL_SERVER_ERROR", async () => {
+            const adminAgent = await getAdminAgent();
+            const originalGetById = ordersRepository.getById;
+            ordersRepository.getById = async () => {
+                throw new AppError(
+                    {
+                        code: "UNKNOWN_CUSTOM_ERROR_CODE_ABC",
+                        statusCode: 500,
+                        message: "Mensaje interno desconocido con marcador FAKE_UNKNOWN_CODE_SECRET_456",
+                    },
+                    "Mensaje override con FAKE_UNKNOWN_CODE_SECRET_456"
+                );
+            };
+
+            try {
+                const res = await adminAgent
+                    .get("/api/orders/507f1f77bcf86cd799439011")
+                    .expect(500);
+
+                expect(res.body).to.deep.include({
+                    status: "error",
+                    statusCode: 500,
+                    message: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message,
+                });
+                expect(res.body.error).to.deep.include({
+                    code: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.code,
+                    message: ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message,
+                    details: {},
+                });
+
+                const serialized = JSON.stringify(res.body);
+                expect(serialized).to.not.include("UNKNOWN_CUSTOM_ERROR_CODE_ABC");
+                expect(serialized).to.not.include("FAKE_UNKNOWN_CODE_SECRET_456");
+            } finally {
+                ordersRepository.getById = originalGetById;
+            }
+        });
+
+        it("detalles adicionales con stack, cause, rutas, consultas o secretos ficticios: no aparecen en el JSON público", async () => {
+            const adminAgent = await getAdminAgent();
+            const originalGetById = ordersRepository.getById;
+            ordersRepository.getById = async () => {
+                const err = new AppError(
+                    ERROR_DICTIONARY.UPLOAD_ERROR,
+                    "Mensaje con marcador FAKE_LEAK_MSG_XYZ"
+                );
+                err.details = {
+                    stack: "Error at C:\\fake\\secret\\path\\server.js:42:10",
+                    cause: "SELECT * FROM users WHERE pass='FAKE_SECRET_PASS_777'",
+                    connectionUri: "mongodb://fake:fake@cluster.internal:27017/db",
+                    secret_token: "FAKE_BEARER_TOKEN_888",
+                    query: "db.orders.find({ secret: 'FAKE_DB_SECRET' })",
+                };
+                throw err;
+            };
+
+            try {
+                const res = await adminAgent
+                    .get("/api/orders/507f1f77bcf86cd799439011")
+                    .expect(500);
+
+                expect(res.body).to.deep.include({
+                    status: "error",
+                    statusCode: 500,
+                    message: ERROR_DICTIONARY.UPLOAD_ERROR.message,
+                });
+                expect(res.body.error).to.deep.include({
+                    code: ERROR_DICTIONARY.UPLOAD_ERROR.code,
+                    message: ERROR_DICTIONARY.UPLOAD_ERROR.message,
+                    details: {},
+                });
+
+                const serialized = JSON.stringify(res.body);
+                expect(serialized).to.not.include("FAKE_LEAK_MSG_XYZ");
+                expect(serialized).to.not.include("fake\\secret\\path");
+                expect(serialized).to.not.include("FAKE_SECRET_PASS_777");
+                expect(serialized).to.not.include("cluster.internal");
+                expect(serialized).to.not.include("FAKE_BEARER_TOKEN_888");
+                expect(serialized).to.not.include("FAKE_DB_SECRET");
+            } finally {
+                ordersRepository.getById = originalGetById;
+            }
         });
     });
 });

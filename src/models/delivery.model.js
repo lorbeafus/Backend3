@@ -48,6 +48,23 @@ const deliverySchema = new Schema(
             default: "",
             trim: true,
         },
+        proofs: {
+            type: [
+                new Schema(
+                    {
+                        original_name: { type: String, required: true },
+                        filename: { type: String, required: true },
+                        path: { type: String, required: true },
+                        mimetype: { type: String, required: true },
+                        size: { type: Number, required: true },
+                        type: { type: String, default: "delivery_proof" },
+                        uploaded_at: { type: Date, default: Date.now },
+                    },
+                    { _id: true }
+                ),
+            ],
+            default: [],
+        },
     },
     {
         timestamps: true,

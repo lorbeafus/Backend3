@@ -95,7 +95,26 @@ export const errorHandler = (err, req, res, next) => {
         if (err.phase) rawDetails.phase = err.phase;
         if (err.insertedCounts) rawDetails.insertedCounts = err.insertedCounts;
     }
-    // 2. Errores de parseo de JSON en body-parser
+    // 2. Errores de Multer (gestión de archivos multipart)
+    else if (err.name === "MulterError") {
+        if (err.code === "LIMIT_FILE_SIZE") {
+            statusCode = ERROR_DICTIONARY.FILE_TOO_LARGE.statusCode;
+            code = ERROR_DICTIONARY.FILE_TOO_LARGE.code;
+            message = ERROR_DICTIONARY.FILE_TOO_LARGE.message;
+            rawDetails = { field: err.field, limit: 5 * 1024 * 1024 };
+        } else if (err.code === "LIMIT_UNEXPECTED_FILE" || err.code === "LIMIT_FILE_COUNT") {
+            statusCode = ERROR_DICTIONARY.UNEXPECTED_FILE_FIELD.statusCode;
+            code = ERROR_DICTIONARY.UNEXPECTED_FILE_FIELD.code;
+            message = ERROR_DICTIONARY.UNEXPECTED_FILE_FIELD.message;
+            rawDetails = { field: err.field };
+        } else {
+            statusCode = 400;
+            code = ERROR_DICTIONARY.INVALID_INPUT_DATA.code;
+            message = `Error en la carga multipart: ${err.message}`;
+            rawDetails = { field: err.field };
+        }
+    }
+    // 3. Errores de parseo de JSON en body-parser
     else if (err.type === "entity.parse.failed") {
         statusCode = 400;
         code = ERROR_DICTIONARY.INVALID_JSON_BODY.code;
@@ -149,14 +168,35 @@ export const errorHandler = (err, req, res, next) => {
     if (statusCode >= 500) {
         // Registro de diagnóstico interno con stack y causa original sin exponer al cliente
 
-
         statusCode = 500;
-        code = ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.code;
-        message = ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message;
-        // Solo metadatos construidos por nuestra clase; nunca detalles de la causa.
-        rawDetails = err instanceof AppError
-            ? { phase: err.phase, insertedCounts: err.insertedCounts }
-            : {};
+
+        // Comprobar si es un AppError con código conocido de nivel 500 en ERROR_DICTIONARY
+        const knownServerDef = (err instanceof AppError && err.code) ? ERROR_DICTIONARY[err.code] : null;
+        const isRecognizedServerError = Boolean(knownServerDef && knownServerDef.statusCode === 500);
+
+        if (isRecognizedServerError) {
+            code = knownServerDef.code;
+            // Usar exclusivamente el mensaje público del diccionario; nunca err.message ni datos de drivers/db
+            message = knownServerDef.message;
+        } else {
+            code = ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.code;
+            message = ERROR_DICTIONARY.INTERNAL_SERVER_ERROR.message;
+        }
+
+        // Limitar detalles de errores 500 exclusivamente a metadatos seguros de seed (phase e insertedCounts)
+        // Nunca copiar err.details indiscriminadamente ni exponer stack, cause, rutas o consultas
+        rawDetails = {};
+        if (err instanceof AppError) {
+            const rawPhase = err.phase || err.details?.phase;
+            if (rawPhase && typeof rawPhase === "string") {
+                rawDetails.phase = rawPhase;
+            }
+
+            const rawCounts = err.insertedCounts || err.details?.insertedCounts;
+            if (rawCounts && typeof rawCounts === "object" && rawCounts !== null) {
+                rawDetails.insertedCounts = rawCounts;
+            }
+        }
     }
 
     logger.log(statusCode >= 500 ? "error" : "warning", statusCode >= 500 ? "Error inesperado de la API" : "Petición rechazada", {

@@ -32,6 +32,23 @@ const userSchema = new Schema(
             },
             default: USER_ROLES.USER,
         },
+        documents: {
+            type: [
+                new Schema(
+                    {
+                        original_name: { type: String, required: true },
+                        filename: { type: String, required: true },
+                        path: { type: String, required: true },
+                        mimetype: { type: String, required: true },
+                        size: { type: Number, required: true },
+                        type: { type: String, required: true },
+                        uploaded_at: { type: Date, default: Date.now },
+                    },
+                    { _id: true }
+                ),
+            ],
+            default: [],
+        },
     },
     {
         timestamps: true,

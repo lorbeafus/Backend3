@@ -26,6 +26,17 @@ export class DeliveriesRepository {
     async count(filter = {}) {
         return await deliveryModel.countDocuments(filter);
     }
+
+    async addProof(id, proofData) {
+        return await deliveryModel.findByIdAndUpdate(
+            id,
+            { $push: { proofs: proofData } },
+            {
+                returnDocument: "after",
+                runValidators: true,
+            }
+        ).lean();
+    }
 }
 
 export const deliveriesRepository = new DeliveriesRepository();

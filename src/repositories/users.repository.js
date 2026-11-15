@@ -38,6 +38,18 @@ export class UsersRepository {
     async delete(id) {
         return await userModel.findByIdAndDelete(id).lean();
     }
+
+    async addDocument(id, documentData) {
+        return await userModel.findByIdAndUpdate(
+            id,
+            { $push: { documents: documentData } },
+            {
+                returnDocument: "after",
+                runValidators: true,
+                select: "-password",
+            }
+        ).lean();
+    }
 }
 
 export const usersRepository = new UsersRepository();
